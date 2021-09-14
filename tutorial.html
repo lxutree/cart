@@ -369,8 +369,8 @@ summary {
 </div>
 
 
-<div id="step-by-step-breakdown-of-cart" class="section level2">
-<h2>Step by step breakdown of CART:</h2>
+<div id="step-by-step-breakdown-of-a-very-basic-cart" class="section level2">
+<h2>Step by step breakdown of a very basic CART:</h2>
 <ol style="list-style-type: decimal">
 <li>Start with full dataset as the ‘root’ of the tree</li>
 <li><ol style="list-style-type: lower-alpha">
@@ -421,7 +421,7 @@ output</code></pre>
   # - count: number of observations in the current branch
   # - split rule: how the splits were done
   # - iter: how many iterations so far?</code></pre>
-<p>Empty objects for later use:</p>
+<p>Create objects for later use:</p>
 <pre class="r"><code># List of observations for all nodes:
 data.list = list()
 
@@ -723,14 +723,16 @@ names(data.next) = NULL; data.list = c(data.list, data.next)</code></pre>
 ## 8   Male     No Yes   YES</code></pre>
 <p>We can check the function against package ‘rpart’:</p>
 <pre class="r"><code>library(rpart)
-rpart(readm ~., data = data,  minsplit = 3)</code></pre>
+rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 <pre><code>## n= 10 
 ## 
 ## node), split, n, loss, yval, (yprob)
 ##       * denotes terminal node
 ## 
 ## 1) root 10 3 NO (0.7000000 0.3000000)  
-##   2) change=Ch 6 1 NO (0.8333333 0.1666667) *
+##   2) change=Ch 6 1 NO (0.8333333 0.1666667)  
+##     4) gender=Male 3 0 NO (1.0000000 0.0000000) *
+##     5) gender=Female 3 1 NO (0.6666667 0.3333333) *
 ##   3) change=No 4 2 NO (0.5000000 0.5000000)  
 ##     6) gender=Female 2 0 NO (1.0000000 0.0000000) *
 ##     7) gender=Male 2 0 YES (0.0000000 1.0000000) *</code></pre>
@@ -774,7 +776,7 @@ regtree(data = data, resp = &quot;time&quot;, min.obs = 3)$output</code></pre>
 ## 6   leaf     3     change = Ch    2 2.333333
 ## 7   leaf     2     change = No    2 4.000000</code></pre>
 <p>Check the function against package ‘rpart’:</p>
-<pre class="r"><code>rpart(time ~., data = data, minsplit = 3)</code></pre>
+<pre class="r"><code>rpart(time ~., data = data, minsplit = 3, cp=-1)</code></pre>
 <pre><code>## n= 10 
 ## 
 ## node), split, n, deviance, yval
@@ -789,7 +791,7 @@ regtree(data = data, resp = &quot;time&quot;, min.obs = 3)$output</code></pre>
 ##     7) change=Ch 3  60.666670 9.333333 *</code></pre>
 <p>Using the first 200 obs. of dataset ’ML_reg_2&quot;:</p>
 <pre class="r"><code>data = read.csv(&quot;Datasets/ML_reg 2.csv&quot;, row.names = 1)[1:200,]
-rpart(num ~., data = data, minsplit = 40, minbucket=4)</code></pre>
+rpart(num ~., data = data, minsplit = 40, minbucket=4, cp=-1)</code></pre>
 <pre><code>## n= 200 
 ## 
 ## node), split, n, deviance, yval
@@ -797,7 +799,9 @@ rpart(num ~., data = data, minsplit = 40, minbucket=4)</code></pre>
 ## 
 ##  1) root 200 55024.870 48.17500  
 ##    2) time&lt; 3.5 80 17239.550 40.82500  
-##      4) age&gt;=23.60456 76 16133.930 40.11842 *
+##      4) age&gt;=23.60456 76 16133.930 40.11842  
+##        8) age&lt; 57.37693 37  7972.324 38.13514 *
+##        9) age&gt;=57.37693 39  7878.000 42.00000 *
 ##      5) age&lt; 23.60456 4   346.750 54.25000 *
 ##    3) time&gt;=3.5 120 30582.320 53.07500  
 ##      6) age&gt;=69.40017 56 16811.430 49.71429  

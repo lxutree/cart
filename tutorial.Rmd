@@ -9,10 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-
-
-## Step by step breakdown of CART:
+## Step by step breakdown of a very basic CART:
 1. Start with full dataset as the 'root' of the tree
 2. a) Identify which node(s) should be split 
    b) which the feature(s) by which the splitting(s) should be done
@@ -64,7 +61,7 @@ output
   # - iter: how many iterations so far?
 ```
 
-Empty objects for later use:
+Create objects for later use:
 ```{r}
 # List of observations for all nodes:
 data.list = list()
@@ -335,7 +332,7 @@ We can check the function against package 'rpart':
 
 ```{r}
 library(rpart)
-rpart(readm ~., data = data,  minsplit = 3)
+rpart(readm ~., data = data,  minsplit = 3, cp=-1)
 ```
 
 
@@ -358,12 +355,12 @@ regtree(data = data, resp = "time", min.obs = 3)$output
 Check the function against package 'rpart':
 
 ```{r}
-rpart(time ~., data = data, minsplit = 3)
+rpart(time ~., data = data, minsplit = 3, cp=-1)
 ```
 
 Using the first 200 obs. of dataset 'ML_reg_2":
 ```{r}
 data = read.csv("Datasets/ML_reg 2.csv", row.names = 1)[1:200,]
-rpart(num ~., data = data, minsplit = 40, minbucket=4)
+rpart(num ~., data = data, minsplit = 40, minbucket=4, cp=-1)
 regtree(data=data, resp = "num", min.obs = 40)$output
 ```

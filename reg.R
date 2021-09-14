@@ -48,9 +48,7 @@ regtree <- function(data, resp, min.obs){
           error[i] = sum(sapply(data.split, function(x){
             sum( (x$resp - mean(x$resp)) ^ 2 )
           })) 
-          # weighted.sd[i] = sum(sapply(data.split, function(x){
-          #   if(nrow(x) == 1) {sd = 0} else {sd = sd(x$resp) * nrow(x)}
-          # }) / nrow(data_sub))
+
         } else {
           splits_sort = sort(unique(data_sub$var))
           sse <- c() # vector of sses for each possible split
@@ -63,21 +61,6 @@ regtree <- function(data, resp, min.obs){
       }
       
 
-      # if( is.factor(data_sub$var) ) {
-      #   splitvar = feat[which.max(sd(data.temp[[resp]]) - weighted.sd)]
-      #   
-      #   # split data by the selected feature:
-      #   data.next = split(data.temp, data.temp[ , splitvar])
-      #   
-      # } else {
-      #   splitvar = feat[which.min(error)]
-      #   value = split_val[which.min(error)]
-      #   
-      #   data.next = list()
-      #   data.next[[1]] = data.temp[which(data.temp[[splitvar]] < value), ]
-      #   data.next[[2]] = data.temp[which(data.temp[[splitvar]] >= value), ]
-      # }
-      
       splitvar = feat[which.min(error)]
       
       if( is.factor(data.temp[[splitvar]])) {
@@ -91,7 +74,6 @@ regtree <- function(data, resp, min.obs){
           data.next[[2]] = data.temp[which(data.temp[[splitvar]] >= value), ]
       }
       
-      data.next = lapply(data.next, function(x){x[, -which(names(x) %in% splitvar)]})
 
       # Stopping criteria: 
       # - less than 3 observations

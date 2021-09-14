@@ -1,22 +1,8 @@
-setwd("~/../LX_Project/CART/")
-
-data = read.csv("Datasets/data_cart_classif_step.csv", row.names = 1)
-
-classtree(data = data, resp = "readm",min.obs = 1)[[1]]
-
-# # step by step break down of CART:
-# 1. Start with full dataset as the 'root' of the tree
-# 2. Identify the feature(s) by which the splitting(s) should be done 
-#    - for a classification tree, we compute the gini index for each feature, then select the one with the lowest gini index
-#    - for a regression tree, we ???
-# 3. Split the dataset at the current node
-# 4. Examine the children nodes - whether they are deemed leaves or need to be split further
-# 5. repeat 2-4 until all all nodes are either parent or leaves.
-
-classtree <- function(data, resp, min.obs = 3){
+classtree <- function(data, resp, min.obs = 20){
   
   # data.frame to store results:
-  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, stringsAsFactors = FALSE)
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", "response" = paste(levels(data[[resp]])[1], ":", table(data[[resp]])[1] , "/",nrow(data)), iter = 0, stringsAsFactors = FALSE)
+  
   # - status: 
   #   - "split" to be split in the next iteration 
   #   - "parent" nodes lead to further splits
@@ -46,6 +32,7 @@ classtree <- function(data, resp, min.obs = 3){
       
       # empty vector for gini index:
       gini=c()
+      min_split = c()
       
       data.temp = data.list[[j]]
       
@@ -55,21 +42,50 @@ classtree <- function(data, resp, min.obs = 3){
       # calculating gini index:
       for (i in 1:length(feat)){
         data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
-        data.gini.list = split(data.gini, data.gini$var)
-        gini[i] = sum(sapply(data.gini.list, function(x){
-          count = table(x)
-          gini = 1 - sum((count / sum(count)) ^ 2)
-          gini * sum(count)
-        }) / nrow(data.gini))
-      }
+        
+        if( is.factor(data.gini$var) ) {
+          data.gini.list = split(data.gini, data.gini$var)
+          gini[i] = sum(sapply(data.gini.list, function(x){
+            count = table(x)
+            gini = 1 - sum((count / sum(count)) ^ 2)
+            gini * sum(count)
+          }) / nrow(data.gini))
+          } else {
+            gini_splits = c()
+            splits_sort = sort(unique(data.gini$var))
+            for( k in 2:length(splits_sort)){
+              data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+              
+              data.gini$var = cut(data.gini$var, breaks =c(splits_sort[1],splits_sort[k], max(splits_sort)+1 ), right=FALSE)
+              
+              data.gini.list = split(data.gini, data.gini$var)
+              gini_splits[k-1] = sum(sapply(data.gini.list, function(x){
+                count = table(x)
+                gini = 1 - sum((count / sum(count)) ^ 2)
+                gini * sum(count)
+              }) / nrow(data.gini))
+            }
+            gini[i] = min(gini_splits)
+            min_split[i] = splits_sort[which.min(gini_splits)]
+          }
+        }
       
       # the feature with the lowest gini index is selected:
       split.var = feat[which.min(gini)]
       
       # split data by the selected feature:
-      data.next = split(data.temp, data.temp[ , split.var])
-      data.next = lapply(data.next, function(x){x[, -which(names(x) %in% split.var)]})
+      if( is.factor(data.temp[[split.var]]) ) {
+        data.next = split(data.temp, data.temp[ , split.var])
+
+      } else {
+          split.val = min_split[which.min(gini)]
+          data.next = list()
+          data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
+          data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
+      }
       
+      # data.next = lapply(data.next, function(x){x[, -which(names(x) %in% split.var)]})
+      # 
       # Stopping criteria: 
       # - less than 3 observations
       # - all observations have the same label
@@ -85,7 +101,7 @@ classtree <- function(data, resp, min.obs = 3){
       # 
       
       status = sapply(data.next, function(x){
-          if (ncol(data.frame(x)) == 1) status = "leaf" else {
+          if (ncol(data.frame(x)) == 1 | length(unique(x[[resp]])) == 1 ) status = "leaf" else {
             if (nrow(x) < min.obs | nrow( unique(data.frame(x[, -which(names(x) %in% resp)])) ) == 1) status = "leaf" else status = "split"
           }
         status
@@ -96,7 +112,13 @@ classtree <- function(data, resp, min.obs = 3){
       output$status[j] = "parent"
       
       # creating outputs
-      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = sapply(names(data.next), function(x){paste(split.var, "=" , x)}), iter = iter, row.names = NULL)
+      split_rule =  if( is.factor(data.temp[[split.var]]) ) {
+        sapply(names(data.next), function(x){paste(split.var, "=" , x)})
+      } else {
+        c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
+      }
+      
+      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), iter = iter, row.names = NULL)
       
       output = rbind(output, temp.output)
       
@@ -109,18 +131,5 @@ classtree <- function(data, resp, min.obs = 3){
     iter = iter+1
   }
   
-  return(list(output, data.list))
+  return(list(output = output, data.list = data.list))
 }
-
-# marks the steps inside function
-# write down step by step 
-# separate function for reg tree
-# check agaisnt other datasets and cart package
-# rmd on github
-
-# checking against datasets in package 'rpart'
-library(rpart)
-
-rpart(Kyphosis~., data = kyphosis, cp=-1, minsplit=2)
-classtree(data = kyphosis, resp = "Kyphosis")[[1]]
-

@@ -1,0 +1,363 @@
+---
+title: "class"
+author: "Liang"
+date: "14/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+## Step by step breakdown of CART:
+1. Start with full dataset as the 'root' of the tree
+2. a) Identify which node(s) should be split 
+   b) which the feature(s) by which the splitting(s) should be done
+   - for a classification tree, we compute the gini index for each feature, then select the one with the lowest gini index
+   - for a regression tree, we compute the SSE for each possible split, then choose the feature with the lowest SSE
+3. Split the dataset accordingly
+4. Examine the children - determine if they are 'leaves' or need to be split further
+  - a node is deemed terminal (a leaf) if it has less than a certain number of observations, or if it contains observations with the same label.
+5. repeat 2-4 until each node is either 'root', 'parent', or 'leaf' 
+
+
+## Simple example using a small dataset (n=10):
+
+Set working directory:
+
+```{r}
+setwd("~/../LX_Project/cart/")
+
+# setwd("")
+```
+
+Load dataset:
+```{r}
+data = read.csv("Datasets/data_cart_classif_step.csv", row.names = 1)
+
+# define response:
+resp = "readm"
+
+# define the minimum number of observations required for further splitting:
+min.obs = 3
+```
+
+$\color{red}{\text{Step 1:}}$
+
+Create data frame to store results:
+```{r}
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", "response" = paste(levels(data[[resp]])[1], ":", table(data[[resp]])[1] , "/",nrow(data)), iter = 0, stringsAsFactors = FALSE)
+
+output
+
+  # Explanation of the outputs:
+  # - status: 
+  #   - "root" is the original dataset
+  #   - "split" to be split in the next iteration 
+  #   - "parent" nodes lead to further splits
+  #   - "leaf" no more splitting to be done
+  # - count: number of observations in the current branch
+  # - split rule: how the splits were done
+  # - iter: how many iterations so far?
+```
+
+Empty objects for later use:
+```{r}
+# List of observations for all nodes:
+data.list = list()
+
+# data at the root:
+data.list[[1]] = data
+
+# indicator for whether the tree keeps growing:
+stopsplit = FALSE
+
+# to keep track of how tall the tree is:
+iter = 1
+```
+
+
+$\color{red}{\text{Step 2 a):}}$, 
+
+During the first iteration, only the root will be split:
+```{r}
+split.queue = which(output$status == "split")
+split.queue
+```
+
+$\color{red}{\text{Step 2 b):}}$, 
+
+Now we compute the gini index for each of the three variables, 'gender', 'change' and 'med':
+
+```{r}
+# empty vectors for later use:
+gini=c()
+min_split = c()
+
+# the dataset at the current node is the full dataset:
+data.temp = data.list[[1]]
+
+# list of features:
+feat = names(data.temp)[names(data.temp)!=resp]
+
+# calculate gini index for each feature i:
+for (i in 1:length(feat)){
+  # data frame with just feature i and the response:
+  data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+  
+  # if feature i is a factor:
+  if( is.factor(data.gini$var) ) {
+    # split by levels:
+    data.gini.list = split(data.gini, data.gini$var)
+    # gini index for feature i:
+    gini[i] = sum(sapply(data.gini.list, function(x){
+      count = table(x)
+      gini = 1 - sum((count / sum(count)) ^ 2)
+      gini * sum(count)
+    }) / nrow(data.gini))
+  
+  # if feature i is not a factor:
+    } else {
+      # empty vector:
+      gini_splits = c()
+      
+      # vector of all possible splits:
+      splits_sort = sort(unique(data.gini$var))
+      
+      # for each possible split...
+      for( k in 2:length(splits_sort)){
+        data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+        
+        # turning the feature into a factor:
+        data.gini$var = cut(data.gini$var, breaks =c(splits_sort[1],splits_sort[k], max(splits_sort)+1 ), right=FALSE)
+        
+        # gini index for each split for feature i:
+        data.gini.list = split(data.gini, data.gini$var)
+        gini_splits[k-1] = sum(sapply(data.gini.list, function(x){
+          count = table(x)
+          gini = 1 - sum((count / sum(count)) ^ 2)
+          gini * sum(count)
+        }) / nrow(data.gini))
+      }
+      
+      # store the smallest gini index for feature i, 
+      # and the corresponding split:
+      gini[i] = min(gini_splits)
+      min_split[i] = splits_sort[which.min(gini_splits)]
+    }
+  }
+```
+
+
+The gini index for the three features are:
+```{r}
+gini
+```
+
+'Change' had the lowest gini index, so it will be used to split the current node:
+```{r}
+# the feature with the lowest gini index is selected:
+split.var = feat[which.min(gini)]
+split.var
+```
+
+$\color{red}{\text{Step 3:}}$, 
+
+Split data:
+```{r}
+# split data by the selected feature:
+if( is.factor(data.temp[[split.var]]) ) {
+  data.next = split(data.temp, data.temp[ , split.var])
+
+} else {
+    split.val = min_split[which.min(gini)]
+    data.next = list()
+    data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
+    data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
+}
+data.next
+```
+
+$\color{red}{\text{Step 4:}}$, 
+
+Determine if the children nodes need to be split further in the next iteration:
+```{r}
+status = sapply(data.next, function(x){
+    if (ncol(data.frame(x)) == 1 | length(unique(x[[resp]])) == 1 ) status = "leaf" else {
+      if (nrow(x) < min.obs | nrow( unique(data.frame(x[, -which(names(x) %in% resp)])) ) == 1) status = "leaf" else status = "split"
+    }
+  status
+})
+```
+
+The answer is yes for both children:
+```{r}
+status
+```
+
+Change the status of the current from "split" to "parent":
+```{r}
+output$status[1] = "parent"
+```
+
+Create new outputs for the children nodes:
+```{r}
+split_rule =  if( is.factor(data.temp[[split.var]]) ) {
+  sapply(names(data.next), function(x){paste(split.var, "=" , x)})
+} else {
+  c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
+}
+
+temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), iter = iter, row.names = NULL)
+
+
+```
+
+Attach the new outputs to the existing ones:
+```{r}
+output = rbind(output, temp.output)
+names(data.next) = NULL; data.list = c(data.list, data.next)
+```
+
+So far, the results are as follows:
+```{r}
+output
+```
+
+$\color{red}{\text{Step 5:}}$, 
+We now repeat steps 2-4 using a while loop:
+
+```{r}
+iter = iter+1
+
+  while(!stopsplit) {
+    split.queue = which(output$status == "split")
+    
+    for (j in split.queue) {
+      gini=c()
+      min_split = c()
+      
+      data.temp = data.list[[j]]
+
+      feat = names(data.temp)[names(data.temp)!=resp]
+
+      for (i in 1:length(feat)){
+        data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+        
+        if( is.factor(data.gini$var) ) {
+          data.gini.list = split(data.gini, data.gini$var)
+          gini[i] = sum(sapply(data.gini.list, function(x){
+            count = table(x)
+            gini = 1 - sum((count / sum(count)) ^ 2)
+            gini * sum(count)
+          }) / nrow(data.gini))
+          } else {
+            gini_splits = c()
+            splits_sort = sort(unique(data.gini$var))
+            for( k in 2:length(splits_sort)){
+              data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+              
+              data.gini$var = cut(data.gini$var, breaks =c(splits_sort[1],splits_sort[k], max(splits_sort)+1 ), right=FALSE)
+              
+              data.gini.list = split(data.gini, data.gini$var)
+              gini_splits[k-1] = sum(sapply(data.gini.list, function(x){
+                count = table(x)
+                gini = 1 - sum((count / sum(count)) ^ 2)
+                gini * sum(count)
+              }) / nrow(data.gini))
+            }
+            gini[i] = min(gini_splits)
+            min_split[i] = splits_sort[which.min(gini_splits)]
+          }
+        }
+    
+      split.var = feat[which.min(gini)]
+      
+      if( is.factor(data.temp[[split.var]]) ) {
+        data.next = split(data.temp, data.temp[ , split.var])
+
+      } else {
+          split.val = min_split[which.min(gini)]
+          data.next = list()
+          data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
+          data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
+      }
+      
+      status = sapply(data.next, function(x){
+          if (ncol(data.frame(x)) == 1 | length(unique(x[[resp]])) == 1 ) status = "leaf" else {
+            if (nrow(x) < min.obs | nrow( unique(data.frame(x[, -which(names(x) %in% resp)])) ) == 1) status = "leaf" else status = "split"
+          }
+        status
+      })
+      
+      output$status[j] = "parent"
+
+      split_rule =  if( is.factor(data.temp[[split.var]]) ) {
+        sapply(names(data.next), function(x){paste(split.var, "=" , x)})
+      } else {
+        c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
+      }
+      
+      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), iter = iter, row.names = NULL)
+      
+      output = rbind(output, temp.output)
+      
+      names(data.next) = NULL; data.list = c(data.list, data.next)
+    }
+    
+    # important: check if there are remaining splits to be done:
+    if(all(output$status != "split")) stopsplit = TRUE
+    
+    iter = iter+1
+  }
+```
+
+The final outputs after the tree is fully grown is as follows:
+```{r}
+output
+```
+
+
+We can organize the above into a function:
+```{r}
+source("class.R")
+```
+
+Applying the function to the dataset above:
+```{r}
+classtree(data = data, resp = "readm", min.obs = 3)
+```
+
+We can check the function against package 'rpart':
+
+```{r}
+library(rpart)
+rpart(readm ~., data = data,  minsplit = 3)
+```
+
+
+Test using the dataset 'kyphosis':
+
+```{r}
+classtree(data = kyphosis, resp = "Kyphosis", min.obs = 20)$output
+
+rpart(Kyphosis ~., data = kyphosis, control = rpart.control(xval=0,minbucket=1,minsplit = 20, cp = -1))
+```
+
+
+Following similar steps, the function can be modified to build regression trees:
+```{r}
+source("reg.R")
+data = read.csv("Datasets/data_cart_rerg_step.csv", row.names = 1)
+regtree(data = data, resp = "time", min.obs = 3)$output
+```
+
+Check the function against package 'rpart':
+
+```{r}
+rpart(time ~., data = data, minsplit = 3)
+```
+

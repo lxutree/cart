@@ -372,20 +372,20 @@ summary {
 <div id="step-by-step-breakdown-of-a-very-basic-cart" class="section level2">
 <h2>Step by step breakdown of a very basic CART:</h2>
 <ol style="list-style-type: decimal">
-<li>Start with full dataset as the ‘root’ of the tree</li>
+<li>Start with the full dataset as the ‘root’ of the tree</li>
 <li><ol style="list-style-type: lower-alpha">
 <li>Identify which node(s) should be split</li>
-<li>which the feature(s) by which the splitting(s) should be done</li>
+<li>For each node, determine the feature by which the split should be done</li>
 </ol>
 <ul>
-<li>for a classification tree, we compute the gini index for each feature, then select the one with the lowest gini index</li>
-<li>for a regression tree, we compute the SSE for each possible split, then choose the feature with the lowest SSE</li>
+<li>for a classification tree, we can compute the gini index for each feature, then select the one with the lowest gini index</li>
+<li>for a regression tree, we can compute the SSE of each possible split for each feature, then choose the feature with the lowest SSE</li>
 </ul></li>
 <li>Split the dataset accordingly</li>
-<li>Examine the children - determine if they are ‘leaves’ or need to be split further</li>
+<li>Examine the children nodes - determine if they are ‘leaves’ or need to be split further</li>
 </ol>
 <ul>
-<li>a node is deemed terminal (a leaf) if it has less than a certain number of observations, or if it contains observations with the same label.</li>
+<li>We consider a node terminal (i.e. a ‘leaf’) if it has less than a certain number of observations, and/or if it contains observations with the same label.</li>
 </ul>
 <ol start="5" style="list-style-type: decimal">
 <li>repeat 2-4 until each node is either ‘root’, ‘parent’, or ‘leaf’</li>
@@ -418,9 +418,9 @@ output</code></pre>
   #   - &quot;split&quot; to be split in the next iteration 
   #   - &quot;parent&quot; nodes lead to further splits
   #   - &quot;leaf&quot; no more splitting to be done
-  # - count: number of observations in the current branch
+  # - count: number of observations in the current node
   # - split rule: how the splits were done
-  # - iter: how many iterations so far?</code></pre>
+  # - iter: how many iterations so far</code></pre>
 <p>Create objects for later use:</p>
 <pre class="r"><code># List of observations for all nodes:
 data.list = list()
@@ -432,7 +432,10 @@ data.list[[1]] = data
 stopsplit = FALSE
 
 # to keep track of how tall the tree is:
-iter = 1</code></pre>
+iter = 1
+
+# list of features:
+feat = names(data)[names(data)!=resp]</code></pre>
 <p><span class="math inline">\(\color{red}{\text{Step 2 a):}}\)</span>,</p>
 <p>During the first iteration, only the root will be split:</p>
 <pre class="r"><code>split.queue = which(output$status == &quot;split&quot;)
@@ -446,9 +449,6 @@ min_split = c()
 
 # the dataset at the current node is the full dataset:
 data.temp = data.list[[1]]
-
-# list of features:
-feat = names(data.temp)[names(data.temp)!=resp]
 
 # calculate gini index for each feature i:
 for (i in 1:length(feat)){
@@ -505,7 +505,7 @@ split.var = feat[which.min(gini)]
 split.var</code></pre>
 <pre><code>## [1] &quot;change&quot;</code></pre>
 <p><span class="math inline">\(\color{red}{\text{Step 3:}}\)</span>,</p>
-<p>Split data:</p>
+<p>Split the current node by the two levels in ‘change’:</p>
 <pre class="r"><code># split data by the selected feature:
 if( is.factor(data.temp[[split.var]]) ) {
   data.next = split(data.temp, data.temp[ , split.var])
@@ -544,7 +544,7 @@ data.next</code></pre>
 <pre class="r"><code>status</code></pre>
 <pre><code>##      Ch      No 
 ## &quot;split&quot; &quot;split&quot;</code></pre>
-<p>Change the status of the current from “split” to “parent”:</p>
+<p>Change the status of the current node from “split” to “parent”:</p>
 <pre class="r"><code>output$status[1] = &quot;parent&quot;</code></pre>
 <p>Create new outputs for the children nodes:</p>
 <pre class="r"><code>split_rule =  if( is.factor(data.temp[[split.var]]) ) {
@@ -646,7 +646,7 @@ names(data.next) = NULL; data.list = c(data.list, data.next)</code></pre>
     
     iter = iter+1
   }</code></pre>
-<p>The final outputs after the tree is fully grown is as follows:</p>
+<p>The final results after the tree is fully grown are the following:</p>
 <pre class="r"><code>output</code></pre>
 <pre><code>##   status count      split.rule    response iter
 ## 1 parent    10            root NO : 7 / 10    0
@@ -659,69 +659,16 @@ names(data.next) = NULL; data.list = c(data.list, data.next)</code></pre>
 <p>We can organize the above into a function:</p>
 <pre class="r"><code>source(&quot;class.R&quot;)</code></pre>
 <p>Applying the function to the dataset above:</p>
-<pre class="r"><code>classtree(data = data, resp = &quot;readm&quot;, min.obs = 3)</code></pre>
-<pre><code>## $output
-##   status count      split.rule    response iter
+<pre class="r"><code>classtree(data = data, resp = &quot;readm&quot;, min.obs = 3)$output</code></pre>
+<pre><code>##   status count      split.rule    response iter
 ## 1 parent    10            root NO : 7 / 10    0
 ## 2 parent     6     change = Ch  NO : 5 / 6    1
 ## 3 parent     4     change = No  NO : 2 / 4    1
 ## 4   leaf     3 gender = Female  NO : 2 / 3    2
 ## 5   leaf     3   gender = Male  NO : 3 / 3    2
 ## 6   leaf     2 gender = Female  NO : 2 / 2    2
-## 7   leaf     2   gender = Male  NO : 0 / 2    2
-## 
-## $data.list
-## $data.list[[1]]
-##    gender change med readm
-## 1  Female     No  No    NO
-## 2  Female     Ch Yes   YES
-## 3  Female     No Yes    NO
-## 4    Male     Ch Yes    NO
-## 5    Male     Ch Yes    NO
-## 6    Male     No Yes   YES
-## 7    Male     Ch Yes    NO
-## 8    Male     No Yes   YES
-## 9  Female     Ch Yes    NO
-## 10 Female     Ch Yes    NO
-## 
-## $data.list[[2]]
-##    gender change med readm
-## 2  Female     Ch Yes   YES
-## 4    Male     Ch Yes    NO
-## 5    Male     Ch Yes    NO
-## 7    Male     Ch Yes    NO
-## 9  Female     Ch Yes    NO
-## 10 Female     Ch Yes    NO
-## 
-## $data.list[[3]]
-##   gender change med readm
-## 1 Female     No  No    NO
-## 3 Female     No Yes    NO
-## 6   Male     No Yes   YES
-## 8   Male     No Yes   YES
-## 
-## $data.list[[4]]
-##    gender change med readm
-## 2  Female     Ch Yes   YES
-## 9  Female     Ch Yes    NO
-## 10 Female     Ch Yes    NO
-## 
-## $data.list[[5]]
-##   gender change med readm
-## 4   Male     Ch Yes    NO
-## 5   Male     Ch Yes    NO
-## 7   Male     Ch Yes    NO
-## 
-## $data.list[[6]]
-##   gender change med readm
-## 1 Female     No  No    NO
-## 3 Female     No Yes    NO
-## 
-## $data.list[[7]]
-##   gender change med readm
-## 6   Male     No Yes   YES
-## 8   Male     No Yes   YES</code></pre>
-<p>We can check the function against package ‘rpart’:</p>
+## 7   leaf     2   gender = Male  NO : 0 / 2    2</code></pre>
+<p>We can check the function against the one from package ‘rpart’:</p>
 <pre class="r"><code>library(rpart)
 rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 <pre><code>## n= 10 
@@ -736,19 +683,19 @@ rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 ##   3) change=No 4 2 NO (0.5000000 0.5000000)  
 ##     6) gender=Female 2 0 NO (1.0000000 0.0000000) *
 ##     7) gender=Male 2 0 YES (0.0000000 1.0000000) *</code></pre>
-<p>Test using the dataset ‘kyphosis’:</p>
+<p>Testing the function with a different dataset, ‘kyphosis’:</p>
 <pre class="r"><code>classtree(data = kyphosis, resp = &quot;Kyphosis&quot;, min.obs = 20)$output</code></pre>
-<pre><code>##   status count    split.rule         response iter
-## 1 parent    81          root absent : 64 / 81    0
-## 2   leaf    19  Start  &lt;=  8  absent : 8 / 19    1
-## 3 parent    62   Start  &gt;  8 absent : 56 / 62    1
-## 4 parent    33 Start  &lt;=  14 absent : 27 / 33    2
-## 5   leaf    29  Start  &gt;  14 absent : 29 / 29    2
-## 6   leaf    12   Age  &lt;=  51 absent : 12 / 12    3
-## 7 parent    21    Age  &gt;  51 absent : 15 / 21    3
-## 8   leaf     5   Age  &lt;=  96   absent : 1 / 5    4
-## 9   leaf    16    Age  &gt;  96 absent : 14 / 16    4</code></pre>
-<pre class="r"><code>rpart(Kyphosis ~., data = kyphosis, control = rpart.control(xval=0,minbucket=1,minsplit = 20, cp = -1))</code></pre>
+<pre><code>##   status count     split.rule         response iter
+## 1 parent    81           root absent : 64 / 81    0
+## 2   leaf    19  Start  &lt;  8.5  absent : 8 / 19    1
+## 3 parent    62  Start  &gt;  8.5 absent : 56 / 62    1
+## 4 parent    33 Start  &lt;  14.5 absent : 27 / 33    2
+## 5   leaf    29 Start  &gt;  14.5 absent : 29 / 29    2
+## 6   leaf    12     Age  &lt;  55 absent : 12 / 12    3
+## 7 parent    21     Age  &gt;  55 absent : 15 / 21    3
+## 8   leaf     7    Age  &lt;  111   absent : 3 / 7    4
+## 9   leaf    14    Age  &gt;  111 absent : 12 / 14    4</code></pre>
+<pre class="r"><code>rpart(Kyphosis ~., data = kyphosis, minsplit = 20, cp = -1)</code></pre>
 <pre><code>## n= 81 
 ## 
 ## node), split, n, loss, yval, (yprob)
@@ -760,8 +707,8 @@ rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 ##      5) Start&lt; 14.5 33  6 absent (0.81818182 0.18181818)  
 ##       10) Age&lt; 55 12  0 absent (1.00000000 0.00000000) *
 ##       11) Age&gt;=55 21  6 absent (0.71428571 0.28571429)  
-##         22) Age&gt;=98 16  2 absent (0.87500000 0.12500000) *
-##         23) Age&lt; 98 5  1 present (0.20000000 0.80000000) *
+##         22) Age&gt;=111 14  2 absent (0.85714286 0.14285714) *
+##         23) Age&lt; 111 7  3 present (0.42857143 0.57142857) *
 ##    3) Start&lt; 8.5 19  8 present (0.42105263 0.57894737) *</code></pre>
 <p>Following similar steps, the function can be modified to build regression trees:</p>
 <pre class="r"><code>source(&quot;reg.R&quot;)
@@ -775,7 +722,7 @@ regtree(data = data, resp = &quot;time&quot;, min.obs = 3)$output</code></pre>
 ## 5   leaf     2     change = No    2 1.500000
 ## 6   leaf     3     change = Ch    2 2.333333
 ## 7   leaf     2     change = No    2 4.000000</code></pre>
-<p>Check the function against package ‘rpart’:</p>
+<p>Check the function against ‘rpart’:</p>
 <pre class="r"><code>rpart(time ~., data = data, minsplit = 3, cp=-1)</code></pre>
 <pre><code>## n= 10 
 ## 
@@ -791,7 +738,7 @@ regtree(data = data, resp = &quot;time&quot;, min.obs = 3)$output</code></pre>
 ##     7) change=Ch 3  60.666670 9.333333 *</code></pre>
 <p>Using the first 200 obs. of dataset ’ML_reg_2&quot;:</p>
 <pre class="r"><code>data = read.csv(&quot;Datasets/ML_reg 2.csv&quot;, row.names = 1)[1:200,]
-rpart(num ~., data = data, minsplit = 40, minbucket=4, cp=-1)</code></pre>
+rpart(num ~., data = data, minsplit = 50, cp=-1)</code></pre>
 <pre><code>## n= 200 
 ## 
 ## node), split, n, deviance, yval
@@ -799,36 +746,32 @@ rpart(num ~., data = data, minsplit = 40, minbucket=4, cp=-1)</code></pre>
 ## 
 ##  1) root 200 55024.870 48.17500  
 ##    2) time&lt; 3.5 80 17239.550 40.82500  
-##      4) age&gt;=23.60456 76 16133.930 40.11842  
-##        8) age&lt; 57.37693 37  7972.324 38.13514 *
-##        9) age&gt;=57.37693 39  7878.000 42.00000 *
-##      5) age&lt; 23.60456 4   346.750 54.25000 *
+##      4) age&gt;=48.91508 59 12927.630 39.84746  
+##        8) age&lt; 55.47996 17  3844.941 35.05882 *
+##        9) age&gt;=55.47996 42  8535.071 41.78571 *
+##      5) age&lt; 48.91508 21  4097.143 43.57143 *
 ##    3) time&gt;=3.5 120 30582.320 53.07500  
 ##      6) age&gt;=69.40017 56 16811.430 49.71429  
 ##       12) age&lt; 75.50441 22  5423.318 43.40909 *
 ##       13) age&gt;=75.50441 34  9947.559 53.79412 *
 ##      7) age&lt; 69.40017 64 12584.980 56.01562  
 ##       14) time&lt; 4.5 17  2841.765 48.88235 *
-##       15) time&gt;=4.5 47  8565.319 58.59574  
-##         30) age&lt; 52.66593 20  2355.750 54.25000 *
-##         31) age&gt;=52.66593 27  5552.074 61.81481 *</code></pre>
-<pre class="r"><code>regtree(data=data, resp = &quot;num&quot;, min.obs = 40)$output</code></pre>
+##       15) time&gt;=4.5 47  8565.319 58.59574 *</code></pre>
+<pre class="r"><code>regtree(data=data, resp = &quot;num&quot;, min.obs = 50)$output</code></pre>
 <pre><code>##    status count               split.rule iter     mean
 ## 1  parent   200                     root    0 48.17500
-## 2  parent    80               time  &lt;  4    1 40.82500
-## 3  parent   120               time &gt;=  4    1 53.07500
-## 4    leaf     4 age  &lt;  25.6424456834793    2 54.25000
-## 5  parent    76 age &gt;=  25.6424456834793    2 40.11842
-## 6  parent    64  age  &lt;  69.456325834617    2 56.01562
-## 7  parent    56  age &gt;=  69.456325834617    2 49.71429
-## 8    leaf    37 age  &lt;  57.5258638057858    3 38.13514
-## 9    leaf    39 age &gt;=  57.5258638057858    3 42.00000
-## 10   leaf    17               time  &lt;  5    3 48.88235
-## 11 parent    47               time &gt;=  5    3 58.59574
-## 12   leaf    22 age  &lt;  75.6068049673922    3 43.40909
-## 13   leaf    34 age &gt;=  75.6068049673922    3 53.79412
-## 14   leaf    20 age  &lt;  53.7083589378744    4 54.25000
-## 15   leaf    27 age &gt;=  53.7083589378744    4 61.81481</code></pre>
+## 2  parent    80             time  &lt;  3.5    1 40.82500
+## 3  parent   120              time &gt;  3.5    1 53.07500
+## 4    leaf    21 age  &lt;  48.9150784339291    2 43.57143
+## 5  parent    59  age &gt;  48.9150784339291    2 39.84746
+## 6  parent    64 age  &lt;  69.4001732207834    2 56.01562
+## 7  parent    56  age &gt;  69.4001732207834    2 49.71429
+## 8    leaf    17 age  &lt;  55.4799632949289    3 35.05882
+## 9    leaf    42  age &gt;  55.4799632949289    3 41.78571
+## 10   leaf    17             time  &lt;  4.5    3 48.88235
+## 11   leaf    47              time &gt;  4.5    3 58.59574
+## 12   leaf    22 age  &lt;  75.5044102831743    3 43.40909
+## 13   leaf    34  age &gt;  75.5044102831743    3 53.79412</code></pre>
 </div>
 
 

@@ -1,5 +1,7 @@
 regtree <- function(data, resp, min.obs){
 
+  # minimum size of leaves?
+  leafsize = min.obs/3 # same as the default in rpart
   
   # data.frame to store results:
   output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, stringsAsFactors = FALSE, mean = mean(data[, resp]) )
@@ -22,6 +24,9 @@ regtree <- function(data, resp, min.obs){
   
   iter = 1
   
+  # list of features:
+  feat = names(data)[names(data)!=resp]
+  
   # iterative process:
   while(!stopsplit) {
     
@@ -35,9 +40,6 @@ regtree <- function(data, resp, min.obs){
       split_val = c()
       
       data.temp = data.list[[j]]
-      
-      # list of features:
-      feat = names(data.temp)[names(data.temp)!=resp]
       
       # calculating gini index:
       for (i in 1:length(feat)){
@@ -53,9 +55,12 @@ regtree <- function(data, resp, min.obs){
           splits_sort = sort(unique(data_sub$var))
           sse <- c() # vector of sses for each possible split
           for( k in 1:length(splits_sort)){
+            count_min = min(length(data_sub$resp[data_sub$var < splits_sort[k]]), length(data_sub$resp[data_sub$var >= splits_sort[k]]))
+             
             sse[k] = sum( (data_sub$resp[data_sub$var < splits_sort[k]] - mean(data_sub$resp[data_sub$var < splits_sort[k]]) )^2 ) + sum( (data_sub$resp[data_sub$var >= splits_sort[k]] - mean(data_sub$resp[data_sub$var >= splits_sort[k]]) )^2 ) 
+            if(count_min < round(leafsize)) sse[k] = NA
           }
-          error[i] = min(sse)
+          error[i] = min(sse, na.rm = TRUE)
           split_val[i] = splits_sort[which.min(sse)]
         }
       }
@@ -68,10 +73,11 @@ regtree <- function(data, resp, min.obs){
       } else {
           splitvar = feat[which.min(error)]
           value = split_val[which.min(error)]
-
+          index = which(sort(unique(data.temp[[splitvar]])) == value)
+          value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
           data.next = list()
           data.next[[1]] = data.temp[which(data.temp[[splitvar]] < value), ]
-          data.next[[2]] = data.temp[which(data.temp[[splitvar]] >= value), ]
+          data.next[[2]] = data.temp[which(data.temp[[splitvar]] > value), ]
       }
       
 
@@ -92,7 +98,7 @@ regtree <- function(data, resp, min.obs){
       if( is.factor(data.temp[[splitvar]]) ) {
         splitrule = sapply(names(data.next), function(x){paste(splitvar, "=" , x)})
       } else {
-        splitrule = c(paste(splitvar, " < ", value),paste(splitvar, ">= ", value) )
+        splitrule = c(paste(splitvar, " < ", value),paste(splitvar, "> ", value) )
       }
 
       # creating outputs

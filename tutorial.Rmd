@@ -10,14 +10,14 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Step by step breakdown of a very basic CART:
-1. Start with full dataset as the 'root' of the tree
+1. Start with the full dataset as the 'root' of the tree
 2. a) Identify which node(s) should be split 
-   b) which the feature(s) by which the splitting(s) should be done
-   - for a classification tree, we compute the gini index for each feature, then select the one with the lowest gini index
-   - for a regression tree, we compute the SSE for each possible split, then choose the feature with the lowest SSE
+   b) For each node, determine the feature by which the split should be done
+   - for a classification tree, we can compute the gini index for each feature, then select the one with the lowest gini index
+   - for a regression tree, we can compute the SSE of each possible split for each feature, then choose the feature with the lowest SSE
 3. Split the dataset accordingly
-4. Examine the children - determine if they are 'leaves' or need to be split further
-  - a node is deemed terminal (a leaf) if it has less than a certain number of observations, or if it contains observations with the same label.
+4. Examine the children nodes - determine if they are 'leaves' or need to be split further
+  - We consider a node terminal (i.e. a 'leaf') if it has less than a certain number of observations, and/or if it contains observations with the same label.
 5. repeat 2-4 until each node is either 'root', 'parent', or 'leaf' 
 
 
@@ -56,9 +56,9 @@ output
   #   - "split" to be split in the next iteration 
   #   - "parent" nodes lead to further splits
   #   - "leaf" no more splitting to be done
-  # - count: number of observations in the current branch
+  # - count: number of observations in the current node
   # - split rule: how the splits were done
-  # - iter: how many iterations so far?
+  # - iter: how many iterations so far
 ```
 
 Create objects for later use:
@@ -74,6 +74,9 @@ stopsplit = FALSE
 
 # to keep track of how tall the tree is:
 iter = 1
+
+# list of features:
+feat = names(data)[names(data)!=resp]
 ```
 
 
@@ -96,9 +99,6 @@ min_split = c()
 
 # the dataset at the current node is the full dataset:
 data.temp = data.list[[1]]
-
-# list of features:
-feat = names(data.temp)[names(data.temp)!=resp]
 
 # calculate gini index for each feature i:
 for (i in 1:length(feat)){
@@ -163,7 +163,7 @@ split.var
 
 $\color{red}{\text{Step 3:}}$, 
 
-Split data:
+Split the current node by the two levels in 'change':
 ```{r}
 # split data by the selected feature:
 if( is.factor(data.temp[[split.var]]) ) {
@@ -195,7 +195,7 @@ The answer is yes for both children:
 status
 ```
 
-Change the status of the current from "split" to "parent":
+Change the status of the current node from "split" to "parent":
 ```{r}
 output$status[1] = "parent"
 ```
@@ -312,7 +312,7 @@ iter = iter+1
   }
 ```
 
-The final outputs after the tree is fully grown is as follows:
+The final results after the tree is fully grown are the following:
 ```{r}
 output
 ```
@@ -325,10 +325,10 @@ source("class.R")
 
 Applying the function to the dataset above:
 ```{r}
-classtree(data = data, resp = "readm", min.obs = 3)
+classtree(data = data, resp = "readm", min.obs = 3)$output
 ```
 
-We can check the function against package 'rpart':
+We can check the function against the one from package 'rpart':
 
 ```{r}
 library(rpart)
@@ -336,12 +336,12 @@ rpart(readm ~., data = data,  minsplit = 3, cp=-1)
 ```
 
 
-Test using the dataset 'kyphosis':
+Testing the function with a different dataset, 'kyphosis':
 
 ```{r}
 classtree(data = kyphosis, resp = "Kyphosis", min.obs = 20)$output
 
-rpart(Kyphosis ~., data = kyphosis, control = rpart.control(xval=0,minbucket=1,minsplit = 20, cp = -1))
+rpart(Kyphosis ~., data = kyphosis, minsplit = 20, cp = -1)
 ```
 
 
@@ -352,7 +352,7 @@ data = read.csv("Datasets/data_cart_rerg_step.csv", row.names = 1)
 regtree(data = data, resp = "time", min.obs = 3)$output
 ```
 
-Check the function against package 'rpart':
+Check the function against 'rpart':
 
 ```{r}
 rpart(time ~., data = data, minsplit = 3, cp=-1)
@@ -361,6 +361,6 @@ rpart(time ~., data = data, minsplit = 3, cp=-1)
 Using the first 200 obs. of dataset 'ML_reg_2":
 ```{r}
 data = read.csv("Datasets/ML_reg 2.csv", row.names = 1)[1:200,]
-rpart(num ~., data = data, minsplit = 40, minbucket=4, cp=-1)
-regtree(data=data, resp = "num", min.obs = 40)$output
+rpart(num ~., data = data, minsplit = 50, cp=-1)
+regtree(data=data, resp = "num", min.obs = 50)$output
 ```

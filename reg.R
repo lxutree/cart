@@ -4,7 +4,7 @@ regtree <- function(data, resp, min.obs){
   leafsize = min.obs/3 # same as the default in rpart
   
   # data.frame to store results:
-  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, stringsAsFactors = FALSE, mean = mean(data[, resp]) )
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, mean = mean(data[, resp]), split.var = "root", stringsAsFactors = FALSE)
   # - status: 
   #   - "split" to be split in the next iteration 
   #   - "parent" nodes lead to further splits
@@ -33,7 +33,7 @@ regtree <- function(data, resp, min.obs){
     # list of splits to be done:
     split.queue = which(output$status == "split")
     
-    for (j in split.queue) {
+    for (j in split.queue[1]) {
       # empty vector 
       weighted.sd = c()
       error = c()
@@ -98,15 +98,15 @@ regtree <- function(data, resp, min.obs){
       if( is.factor(data.temp[[splitvar]]) ) {
         splitrule = sapply(names(data.next), function(x){paste(splitvar, "=" , x)})
       } else {
-        splitrule = c(paste(splitvar, " < ", value),paste(splitvar, "> ", value) )
+        splitrule = c(paste(splitvar, "<", value),paste(splitvar, ">", value) )
       }
 
       # creating outputs
-      temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}))
+      temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}), split.var = splitvar)
       
-      output = rbind(output, temp.output)
+      output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
       
-      names(data.next) = NULL; data.list = c(data.list, data.next)
+      names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
     }
     
     # check if there are remaining splits to be done:
@@ -114,6 +114,7 @@ regtree <- function(data, resp, min.obs){
     
     iter = iter+1
   }
+  
   
   return(list(output = output, data.list = data.list))
 }

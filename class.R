@@ -23,8 +23,6 @@ classtree <- function(data, resp, min.obs = 20){
   # indicator for whether the tree keeps growing:
   stopsplit = FALSE
   
-  iter = 1
-  
   # list of features:
   feat = names(data)[names(data)!=resp]
   
@@ -34,7 +32,7 @@ classtree <- function(data, resp, min.obs = 20){
     # list of splits to be done:
     split.queue = which(output$status == "split")
     
-    for (j in split.queue) {
+    for (j in split.queue[1]) {
       
       # empty vector for gini index:
       gini=c()
@@ -115,17 +113,15 @@ classtree <- function(data, resp, min.obs = 20){
         c(paste(split.var, " < ", split.val),  paste(split.var, " > ", split.val))
       }
       
-      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), iter = iter, row.names = NULL)
+      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), iter = output$iter[j] + 1, row.names = NULL)
       
-      output = rbind(output, temp.output)
+      output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
       
-      names(data.next) = NULL; data.list = c(data.list, data.next)
+      names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
     }
     
     # check if there are remaining splits to be done:
     if(all(output$status != "split")) stopsplit = TRUE
-    
-    iter = iter+1
   }
   
   return(list(output = output, data.list = data.list))

@@ -660,14 +660,14 @@ names(data.next) = NULL; data.list = c(data.list, data.next)</code></pre>
 <pre class="r"><code>source(&quot;class.R&quot;)</code></pre>
 <p>Applying the function to the dataset above:</p>
 <pre class="r"><code>classtree(data = data, resp = &quot;readm&quot;, min.obs = 3)$output</code></pre>
-<pre><code>##   status count      split.rule    response iter
-## 1 parent    10            root NO : 7 / 10    0
-## 2 parent     6     change = Ch  NO : 5 / 6    1
-## 3 parent     4     change = No  NO : 2 / 4    1
-## 4   leaf     3 gender = Female  NO : 2 / 3    2
-## 5   leaf     3   gender = Male  NO : 3 / 3    2
-## 6   leaf     2 gender = Female  NO : 2 / 2    2
-## 7   leaf     2   gender = Male  NO : 0 / 2    2</code></pre>
+<pre><code>##    status count      split.rule    response iter
+## 1  parent    10            root NO : 7 / 10    0
+## 2  parent     6     change = Ch  NO : 5 / 6    1
+## 3    leaf     3 gender = Female  NO : 2 / 3    2
+## 4    leaf     3   gender = Male  NO : 3 / 3    2
+## 31 parent     4     change = No  NO : 2 / 4    1
+## 11   leaf     2 gender = Female  NO : 2 / 2    2
+## 21   leaf     2   gender = Male  NO : 0 / 2    2</code></pre>
 <p>We can check the function against the one from package ‘rpart’:</p>
 <pre class="r"><code>library(rpart)
 rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
@@ -685,16 +685,16 @@ rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 ##     7) gender=Male 2 0 YES (0.0000000 1.0000000) *</code></pre>
 <p>Testing the function with a different dataset, ‘kyphosis’:</p>
 <pre class="r"><code>classtree(data = kyphosis, resp = &quot;Kyphosis&quot;, min.obs = 20)$output</code></pre>
-<pre><code>##   status count     split.rule         response iter
-## 1 parent    81           root absent : 64 / 81    0
-## 2   leaf    19  Start  &lt;  8.5  absent : 8 / 19    1
-## 3 parent    62  Start  &gt;  8.5 absent : 56 / 62    1
-## 4 parent    33 Start  &lt;  14.5 absent : 27 / 33    2
-## 5   leaf    29 Start  &gt;  14.5 absent : 29 / 29    2
-## 6   leaf    12     Age  &lt;  55 absent : 12 / 12    3
-## 7 parent    21     Age  &gt;  55 absent : 15 / 21    3
-## 8   leaf     7    Age  &lt;  111   absent : 3 / 7    4
-## 9   leaf    14    Age  &gt;  111 absent : 12 / 14    4</code></pre>
+<pre><code>##    status count     split.rule         response iter
+## 1  parent    81           root absent : 64 / 81    0
+## 2    leaf    19  Start  &lt;  8.5  absent : 8 / 19    1
+## 3  parent    62  Start  &gt;  8.5 absent : 56 / 62    1
+## 4  parent    33 Start  &lt;  14.5 absent : 27 / 33    2
+## 5    leaf    12     Age  &lt;  55 absent : 12 / 12    3
+## 6  parent    21     Age  &gt;  55 absent : 15 / 21    3
+## 11   leaf     7    Age  &lt;  111   absent : 3 / 7    4
+## 21   leaf    14    Age  &gt;  111 absent : 12 / 14    4
+## 51   leaf    29 Start  &gt;  14.5 absent : 29 / 29    2</code></pre>
 <pre class="r"><code>rpart(Kyphosis ~., data = kyphosis, minsplit = 20, cp = -1)</code></pre>
 <pre><code>## n= 81 
 ## 
@@ -714,14 +714,14 @@ rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 <pre class="r"><code>source(&quot;reg.R&quot;)
 data = read.csv(&quot;Datasets/data_cart_rerg_step.csv&quot;, row.names = 1)
 regtree(data = data, resp = &quot;time&quot;, min.obs = 3)$output</code></pre>
-<pre><code>##   status count      split.rule iter     mean
-## 1 parent    10            root    0 4.600000
-## 2 parent     5 gender = Female    1 6.200000
-## 3 parent     5   gender = Male    1 3.000000
-## 4   leaf     3     change = Ch    2 9.333333
-## 5   leaf     2     change = No    2 1.500000
-## 6   leaf     3     change = Ch    2 2.333333
-## 7   leaf     2     change = No    2 4.000000</code></pre>
+<pre><code>##    status count      split.rule iter     mean split.var
+## 1  parent    10            root    0 4.600000      root
+## 2  parent     5 gender = Female    1 6.200000    gender
+## 3    leaf     3     change = Ch    2 9.333333    change
+## 4    leaf     2     change = No    2 1.500000    change
+## 31 parent     5   gender = Male    1 3.000000    gender
+## 11   leaf     3     change = Ch    3 2.333333    change
+## 21   leaf     2     change = No    3 4.000000    change</code></pre>
 <p>Check the function against ‘rpart’:</p>
 <pre class="r"><code>rpart(time ~., data = data, minsplit = 3, cp=-1)</code></pre>
 <pre><code>## n= 10 
@@ -758,20 +758,20 @@ rpart(num ~., data = data, minsplit = 50, cp=-1)</code></pre>
 ##       14) time&lt; 4.5 17  2841.765 48.88235 *
 ##       15) time&gt;=4.5 47  8565.319 58.59574 *</code></pre>
 <pre class="r"><code>regtree(data=data, resp = &quot;num&quot;, min.obs = 50)$output</code></pre>
-<pre><code>##    status count               split.rule iter     mean
-## 1  parent   200                     root    0 48.17500
-## 2  parent    80             time  &lt;  3.5    1 40.82500
-## 3  parent   120              time &gt;  3.5    1 53.07500
-## 4    leaf    21 age  &lt;  48.9150784339291    2 43.57143
-## 5  parent    59  age &gt;  48.9150784339291    2 39.84746
-## 6  parent    64 age  &lt;  69.4001732207834    2 56.01562
-## 7  parent    56  age &gt;  69.4001732207834    2 49.71429
-## 8    leaf    17 age  &lt;  55.4799632949289    3 35.05882
-## 9    leaf    42  age &gt;  55.4799632949289    3 41.78571
-## 10   leaf    17             time  &lt;  4.5    3 48.88235
-## 11   leaf    47              time &gt;  4.5    3 58.59574
-## 12   leaf    22 age  &lt;  75.5044102831743    3 43.40909
-## 13   leaf    34  age &gt;  75.5044102831743    3 53.79412</code></pre>
+<pre><code>##    status count             split.rule iter     mean split.var
+## 1  parent   200                   root    0 48.17500      root
+## 2  parent    80             time &lt; 3.5    1 40.82500      time
+## 3    leaf    21 age &lt; 48.9150784339291    2 43.57143       age
+## 4  parent    59 age &gt; 48.9150784339291    2 39.84746       age
+## 11   leaf    17 age &lt; 55.4799632949289    3 35.05882       age
+## 21   leaf    42 age &gt; 55.4799632949289    3 41.78571       age
+## 31 parent   120             time &gt; 3.5    1 53.07500      time
+## 12 parent    64 age &lt; 69.4001732207834    4 56.01562       age
+## 13   leaf    17             time &lt; 4.5    5 48.88235      time
+## 23   leaf    47             time &gt; 4.5    5 58.59574      time
+## 22 parent    56 age &gt; 69.4001732207834    4 49.71429       age
+## 14   leaf    22 age &lt; 75.5044102831743    6 43.40909       age
+## 24   leaf    34 age &gt; 75.5044102831743    6 53.79412       age</code></pre>
 </div>
 
 

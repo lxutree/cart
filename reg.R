@@ -1,10 +1,10 @@
-regtree <- function(data, resp, min.obs){
+regtree <- function(data, resp, min.obs, feat = NULL){
 
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
   
   # data.frame to store results:
-  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, mean = mean(data[, resp]), split.var = "root", stringsAsFactors = FALSE)
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, mean = mean(data[, resp]), stringsAsFactors = FALSE)
   # - status: 
   #   - "split" to be split in the next iteration 
   #   - "parent" nodes lead to further splits
@@ -25,7 +25,7 @@ regtree <- function(data, resp, min.obs){
   iter = 1
   
   # list of features:
-  feat = names(data)[names(data)!=resp]
+  if(is.null(feat)) feat = names(data)[names(data)!=resp] else feat = feat
   
   # iterative process:
   while(!stopsplit) {
@@ -50,6 +50,10 @@ regtree <- function(data, resp, min.obs){
           error[i] = sum(sapply(data.split, function(x){
             sum( (x$resp - mean(x$resp)) ^ 2 )
           })) 
+          
+          count_min = min(sapply(data.split, nrow))
+          
+          if( count_min < leafsize) error[i] = NA
 
         } else {
           splits_sort = sort(unique(data_sub$var))
@@ -60,8 +64,8 @@ regtree <- function(data, resp, min.obs){
             sse[k] = sum( (data_sub$resp[data_sub$var < splits_sort[k]] - mean(data_sub$resp[data_sub$var < splits_sort[k]]) )^2 ) + sum( (data_sub$resp[data_sub$var >= splits_sort[k]] - mean(data_sub$resp[data_sub$var >= splits_sort[k]]) )^2 ) 
             if(count_min < round(leafsize)) sse[k] = NA
           }
-          error[i] = min(sse, na.rm = TRUE)
-          split_val[i] = splits_sort[which.min(sse)]
+          
+          if(all(is.na(sse))) {error[i] = NA; split_val[i] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[i] = splits_sort[which.min(sse)]}
         }
       }
       
@@ -102,7 +106,7 @@ regtree <- function(data, resp, min.obs){
       }
 
       # creating outputs
-      temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}), split.var = splitvar)
+      temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}))
       
       output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
       

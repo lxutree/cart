@@ -1,0 +1,115 @@
+---
+title: "CART example"
+author: "Liang"
+date: "14/09/2021"
+output: html_document
+---
+
+Set working directory:
+  
+```{r}
+setwd("~/../LX_Project/cart/")
+# setwd("")
+```
+
+```{r}
+library(rpart)
+library(ipred)
+
+# load functions
+source("bagg.R")
+source("class.R")
+source("reg.R")
+
+```
+
+The output of the bagging function 'bagg' is the rate of missclassification for binary response, or root mean square error for continuous response
+
+Example 1. dataset 'kyphosis' with binary response:
+```{r}
+bagg(data = kyphosis, resp = "Kyphosis", n.boot = 30, min.obs=20)
+```
+
+check with package 'ipred':
+```{r}
+bagging(
+  formula = Kyphosis ~ .,
+  data = kyphosis,
+  nbagg = 30,  
+  coob = TRUE,
+  control = rpart.control(minsplit = 20, cp = -1)
+)$err
+```
+
+Plot of missclassification rate against the number of bootstrap samples:
+```{r}
+nsample = c(10,20, 30,50, 70, 100)
+set.seed(123)
+rmse1 = sapply(nsample, function(n){
+bagg(data = kyphosis, resp = "Kyphosis", n.boot = n, min.obs=20)
+})
+
+plot(nsample, rmse1)
+```
+
+
+Plot of missclassification rate against the number of bootstrap samples with 'ipred':
+```{r}
+set.seed(123)
+rmse2 = sapply(nsample, function(n){
+bagging(
+  formula = Kyphosis ~ .,
+  data = kyphosis,
+  nbagg = n,  
+  coob = TRUE,
+  control = rpart.control(minsplit = 20, cp = -1)
+)$err
+})
+
+plot(nsample, rmse2)
+```
+
+Example 2. subset of dataset 'ML_reg_2": 
+```{r}
+data = read.csv("Datasets/ML_reg 2.csv", row.names = 1)[1:200,]
+bagg(data = data, resp = "num", n.boot = 30, min.obs=50)
+```
+
+check with package 'ipred':
+```{r}
+bagging(
+  formula = num ~ .,
+  data = data,
+  nbagg = 30,  
+  coob = TRUE,
+  control = rpart.control(minsplit = 50, cp = -1)
+)$err
+```
+
+Plot of rmse against the number of bootstrap samples:
+```{r}
+nsample = c(10,20, 30,50, 70, 100)
+set.seed(123)
+rmse1 = sapply(nsample, function(n){
+  bagg(data = data, resp = "num", n.boot = n, min.obs=50)
+})
+
+plot(nsample, rmse1)
+```
+
+Plot of rmse against the number of bootstrap samples with 'ipred':
+```{r}
+set.seed(123)
+rmse2 = sapply(nsample, function(n){
+  bagging(
+  formula = num ~ .,
+  data = data,
+  nbagg = n,  
+  coob = TRUE,
+  control = rpart.control(minsplit = 50, cp = -1)
+)$err
+})
+
+plot(nsample, rmse2)
+```
+

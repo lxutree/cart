@@ -1,10 +1,10 @@
-classtree <- function(data, resp, min.obs = 20){
+classtree <- function(data, resp, min.obs = 20, feat = NULL){
   
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
   
   # data.frame to store results:
-  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", "response" = paste(levels(data[[resp]])[1], ":", table(data[[resp]])[1] , "/",nrow(data)), iter = 0, stringsAsFactors = FALSE)
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", "response" = paste(levels(data[[resp]])[1], ":", table(data[[resp]])[1] , "/",nrow(data)), iter = 0, prob =  table(data[[resp]])[1]/nrow(data), stringsAsFactors = FALSE)
   
   # - status: 
   #   - "split" to be split in the next iteration 
@@ -24,7 +24,7 @@ classtree <- function(data, resp, min.obs = 20){
   stopsplit = FALSE
   
   # list of features:
-  feat = names(data)[names(data)!=resp]
+  if(is.null(feat)) feat = names(data)[names(data)!=resp] else feat = feat
   
   # iterative process:
   while(!stopsplit) {
@@ -39,8 +39,6 @@ classtree <- function(data, resp, min.obs = 20){
       min_split = c()
       
       data.temp = data.list[[j]]
-      
-
       
       # calculating gini index:
       for (i in 1:length(feat)){
@@ -73,8 +71,13 @@ classtree <- function(data, resp, min.obs = 20){
               
               if(count_min < round(leafsize)) gini_splits[k-1] = NA
             }
+            
+            if(all(is.na(gini_splits))) {
+              gini[i] = NA
+              min_split[i] = NA
+          } else {
             gini[i] = min(gini_splits, na.rm = TRUE)
-            min_split[i] = splits_sort[which.min(gini_splits)]
+            min_split[i] = splits_sort[which.min(gini_splits)]}
           }
         }
       
@@ -90,7 +93,7 @@ classtree <- function(data, resp, min.obs = 20){
           index = which(sort(unique(data.temp[[split.var]])) == split.val)
           split.val = (sort(unique(data.temp[[split.var]]))[index] + sort(unique(data.temp[[split.var]]))[index+1])/2
           data.next = list()
-          data.next[[1]] = data.temp[which(data.temp[[split.var]] < split.val), ]
+          data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
           data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
       }
       
@@ -110,10 +113,10 @@ classtree <- function(data, resp, min.obs = 20){
       split_rule =  if( is.factor(data.temp[[split.var]]) ) {
         sapply(names(data.next), function(x){paste(split.var, "=" , x)})
       } else {
-        c(paste(split.var, " < ", split.val),  paste(split.var, " > ", split.val))
+        c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
       }
       
-      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), iter = output$iter[j] + 1, row.names = NULL)
+      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), prob = sapply(data.next, function(x){ table(x[[resp]])[1]}) / sapply(data.next,nrow), iter = output$iter[j] + 1, row.names = NULL)
       
       output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
       

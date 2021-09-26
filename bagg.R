@@ -1,43 +1,85 @@
-data = read.csv("Datasets/data_cart_rerg_step.csv", row.names = 1)
-
 # this is the function for boostrap aggregation
 
-# start by drawing 
-
-function(data, n.boot = 10, ...){
-  n.boot=10
+bagg <- function(data, resp, n.boot = 10, min.obs, ...){
   # start by drawing 'n.boot' bootstrap samples:
-  
-  data_list = list()
-  outtabag = list()
-  
+  feat = names(data)[names(data)!=resp]
+  data_list = index_list = list()
+  pred = c()
+
   for (i in 1:n.boot){
-    index = sample(nrow(data),  replace = TRUE)
+    # index of bootstrap sample:
+    index_list[[i]] = sample(nrow(data),  replace = TRUE)
     
-    # the ith bootstrap sample:
-    data_list[[i]] =data[index, ]
+    # ith bootstrap sample:
+    data_list[[i]] =data[index_list[[i]], ]
     
-    # the ith 'out of bag' sample
-    outtabag[[i]] = data[!(1:nrow(data) %in% unique(index)), ]
   }
 
+  # list of trees for each bootstrap sample
+  tree_list = lapply(data_list, function(data_i){
+    if(class(data_i[, resp]) == "factor"){
+      classtree(data = data_i, resp = resp, min.obs = min.obs)$output
+    } else {
+      regtree(data = data_i, resp = resp, min.obs = min.obs)$output
+    }
+  })
+  
+  # compute the average value/majority vote for each obs
+  for (obs in 1:nrow(data)){
+    # list of trees that weren't built from this obs
+    ifoob = sapply(index_list, function(index){
+      !(obs %in% index)
+    })
+    
+    if(class(data[, resp]) == "factor"){
+      # for classification:
+      pred_obs = lapply(1:length(tree_list), function(k){
+        if(ifoob[k] == TRUE) data.frame(resp = predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]], data = data)[,resp]) else NA
+      })
+      pred_obs = na.omit.list(pred_obs)
+      pred_obs = do.call(rbind, pred_obs)
+      
+      if(is.null(pred_obs)) pred[obs] = NA else{
+        # find the majority vote
+        pred[obs] = if(table(pred_obs)[1] != table(pred_obs)[2]){
+          levels(pred_obs$resp)[which.max(table(pred_obs))]
+        } else {
+        # If there's no majority, pick randomly
+          levels(pred_obs$resp)[sample(x = 2, size = 1, prob = c(0.5, 0.5))]
+        } 
+      }
+    } else {
+      # for regression:
+      pred_obs = sapply(1:length(tree_list), function(k){
+        if(ifoob[k] == TRUE) predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]], data = data)[,resp] else NA
+      })
+      
+      # compute the average of predictions
+      if (all(is.na(pred_obs))) pred[obs] = NA else pred[obs]  = mean(pred_obs, na.rm = TRUE)
+      
+    }
+    
+  }
+  if(class(data[, resp]) == "factor"){
+    comb = data.frame(pred, observed= data[,resp])
+    comb = na.omit(comb)
+    
+    # find the rate of missclassification
+    error = mean(comb$pred != comb$observed)
+  } else {
+    # compute rmse
+    error = sqrt(mean( (pred - data[,resp])^2, na.rm = TRUE))
+  }
+   return(error = error)
 }
 
-library(rpart)
-bag_test <- bagging(
-  formula = time ~ .,
-  data = data,
-  nbagg = 10,  
-  coob = TRUE,
-  control = rpart.control(minsplit = 2, cp = -1)
-)
-
-bag_test
 
 
-predtree = function(newdata, res){
-  newdata$resp = c()
-  rules = data.frame(t(sapply(res$split.rule[-1 ], function(x){scan(text = x, what = "")}, USE.NAMES = FALSE)), res$iter[-1], stringsAsFactors = FALSE)
+# function to generate predictions based on given tree
+predtree = function(newdata, resp, res, data){
+  
+  # splitting rules from tree:
+  rules = data.frame(t(sapply(res$split.rule[-1 ], function(x){scan(text = x, what = "" , quiet = TRUE, )}, USE.NAMES = FALSE)), res$iter[-1], stringsAsFactors = FALSE)
   names(rules) = c("feat", "operator", "value", "iter")
   
   for(k in 1:nrow(newdata)){
@@ -48,27 +90,24 @@ predtree = function(newdata, res){
       if(compare(newdata[k, rules[ii, "feat"]], rules[ii, "value"],  (rules[ii, "operator"]))) {
         if(rules$iter[ii+1] == rules$iter[ii]) stoploop = TRUE else ii = ii + 1
       } else {
-        ii = which(rules$feat == rules$feat[ii])[which(rules$feat == rules$feat[ii]) > ii][1]
+        ii = which(rules$feat == rules$feat[ii] & rules$iter == rules$iter[ii])[which(rules$feat == rules$feat[ii] & rules$iter == rules$iter[ii]) > ii][1]
       }
-      
       if(rules$iter[ii+1] < rules$iter[ii] | ii == nrow(rules)) stoploop = TRUE
     }
     
-    newdata$resp[k] = res$mean[ii+1]
-  }
+    if(class(data[, resp]) == "factor"){
+      newdata[,resp][k] = if(res$prob[ii+1] > 0.5) levels(data[, resp])[1] else { if(res$prob[ii+1] == 0.5) levels(data[, resp])[sample(x = 2, size = 1, prob = c(0.5, 0.5))] else levels(data[, resp])[2]}
+      } else {
+        newdata[,resp][k] = res$mean[ii+1]
+        }
+    }
   return(newdata)
 }
 
-predtree(newdata = unique(data[,-4]), res = res)
-
-res = regtree(data=data, resp = "num", min.obs = 50)$output
-predtree(newdata = unique(data[20,]), res = res)
-
-source("reg.R")
-data = read.csv("Datasets/data_cart_rerg_step.csv", row.names = 1)
-res = regtree(data = data, resp = "time", min.obs = 3)$output
-
-
-compare = function(x1,x2, operator){ 
+# helper function:
+compare = function(x1,value, operator){ 
   if(operator == "=") operator = "=="
-  res = getFunction(operator)(x1,x2); res }
+  if(!is.na(suppressWarnings(as.numeric(value)))) value = as.numeric(value)
+  res = getFunction(operator)(x1,value); res }
+
+na.omit.list <- function(y) { return(y[!sapply(y, function(x) all(is.na(x)))]) }

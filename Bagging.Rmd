@@ -46,7 +46,7 @@ Plot of missclassification rate against the number of bootstrap samples:
 nsample = c(10,20, 30,50, 70, 100)
 set.seed(123)
 rmse1 = sapply(nsample, function(n){
-bagg(data = kyphosis, resp = "Kyphosis", n.boot = n, min.obs=20)
+bagg(data = kyphosis, resp = "Kyphosis", n.boot = n, min.obs=20)$error
 })
 
 plot(nsample, rmse1)
@@ -91,7 +91,7 @@ Plot of rmse against the number of bootstrap samples:
 nsample = c(10,20, 30,50, 70, 100)
 set.seed(123)
 rmse1 = sapply(nsample, function(n){
-  bagg(data = data, resp = "num", n.boot = n, min.obs=50)
+  bagg(data = data, resp = "num", n.boot = n, min.obs=50)$error
 })
 
 plot(nsample, rmse1)

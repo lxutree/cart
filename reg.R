@@ -27,6 +27,10 @@ regtree <- function(data, resp, min.obs, feat = NULL){
   # list of features:
   if(is.null(feat)) feat = names(data)[names(data)!=resp] else feat = feat
   
+  # vector of features/gini index reduction for each split:
+  feat_vec = c()
+  diff_vec = c()
+  
   # iterative process:
   while(!stopsplit) {
     
@@ -44,6 +48,8 @@ regtree <- function(data, resp, min.obs, feat = NULL){
       # calculating gini index:
       for (i in 1:length(feat)){
         data_sub = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
+        
+        rss_parent = sum((data_sub$resp - mean(data_sub$resp))^2)
         
         if( is.factor(data_sub$var) ) {
           data.split = split(data_sub, data_sub$var)
@@ -69,8 +75,11 @@ regtree <- function(data, resp, min.obs, feat = NULL){
         }
       }
       
-
       splitvar = feat[which.min(error)]
+      rss_diff = rss_parent - min(error, na.rm = TRUE)
+      feat_vec = c(feat_vec, splitvar)
+      diff_vec = c(diff_vec, rss_diff)
+      
       
       if( is.factor(data.temp[[splitvar]])) {
         data.next = split(data.temp, data.temp[ , splitvar])
@@ -118,8 +127,11 @@ regtree <- function(data, resp, min.obs, feat = NULL){
     
     iter = iter+1
   }
+  rss_sum = c()
+  for (i in 1:length(feat)){
+    rss_sum[i] = sum(diff_vec[which(feat_vec == feat[i])])
+  }
   
-  
-  return(list(output = output, data.list = data.list))
+  return(list(output = output, var_rank = data.frame(criterion = rss_sum, row.names = feat)))
 }
 

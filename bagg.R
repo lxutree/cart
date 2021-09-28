@@ -18,9 +18,9 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
   # list of trees for each bootstrap sample
   tree_list = lapply(data_list, function(data_i){
     if(class(data_i[, resp]) == "factor"){
-      classtree(data = data_i, resp = resp, min.obs = min.obs)$output
+      classtree(data = data_i, resp = resp, min.obs = min.obs)
     } else {
-      regtree(data = data_i, resp = resp, min.obs = min.obs)$output
+      regtree(data = data_i, resp = resp, min.obs = min.obs)
     }
   })
   
@@ -34,7 +34,7 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
     if(class(data[, resp]) == "factor"){
       # for classification:
       pred_obs = lapply(1:length(tree_list), function(k){
-        if(ifoob[k] == TRUE) data.frame(resp = predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]], data = data)[,resp]) else NA
+        if(ifoob[k] == TRUE) data.frame(resp = predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]]$output, data = data)[,resp]) else NA
       })
       pred_obs = na.omit.list(pred_obs)
       pred_obs = do.call(rbind, pred_obs)
@@ -51,7 +51,7 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
     } else {
       # for regression:
       pred_obs = sapply(1:length(tree_list), function(k){
-        if(ifoob[k] == TRUE) predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]], data = data)[,resp] else NA
+        if(ifoob[k] == TRUE) predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]]$output, data = data)[,resp] else NA
       })
       
       # compute the average of predictions
@@ -70,7 +70,11 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
     # compute rmse
     error = sqrt(mean( (pred - data[,resp])^2, na.rm = TRUE))
   }
-   return(error = error)
+  
+  var_rank_mean = apply(sapply(tree_list, function(tree){ tree$var_rank$criterion}), MARGIN = 1, FUN = mean)
+  names(var_rank_mean) = feat
+  rank = sort(var_rank_mean, decreasing = TRUE)
+   return(list(error = error, "Importance Rank" = rank ))
 }
 
 

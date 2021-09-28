@@ -382,7 +382,12 @@ source(&quot;reg.R&quot;)</code></pre>
 <p>The output of the bagging function ‘bagg’ is the rate of missclassification for binary response, or root mean square error for continuous response</p>
 <p>Example 1. dataset ‘kyphosis’ with binary response:</p>
 <pre class="r"><code>bagg(data = kyphosis, resp = &quot;Kyphosis&quot;, n.boot = 30, min.obs=20)</code></pre>
-<pre><code>## [1] 0.1604938</code></pre>
+<pre><code>## $error
+## [1] 0.1851852
+## 
+## $`Importance Rank`
+##      Start        Age     Number 
+## 0.10236693 0.09385391 0.03918702</code></pre>
 <p>check with package ‘ipred’:</p>
 <pre class="r"><code>bagging(
   formula = Kyphosis ~ .,
@@ -391,12 +396,12 @@ source(&quot;reg.R&quot;)</code></pre>
   coob = TRUE,
   control = rpart.control(minsplit = 20, cp = -1)
 )$err</code></pre>
-<pre><code>## [1] 0.1975309</code></pre>
+<pre><code>## [1] 0.2222222</code></pre>
 <p>Plot of missclassification rate against the number of bootstrap samples:</p>
 <pre class="r"><code>nsample = c(10,20, 30,50, 70, 100)
 set.seed(123)
 rmse1 = sapply(nsample, function(n){
-bagg(data = kyphosis, resp = &quot;Kyphosis&quot;, n.boot = n, min.obs=20)
+bagg(data = kyphosis, resp = &quot;Kyphosis&quot;, n.boot = n, min.obs=20)$error
 })
 
 plot(nsample, rmse1)</code></pre>
@@ -418,7 +423,12 @@ plot(nsample, rmse2)</code></pre>
 <p>Example 2. subset of dataset ’ML_reg_2&quot;:</p>
 <pre class="r"><code>data = read.csv(&quot;Datasets/ML_reg 2.csv&quot;, row.names = 1)[1:200,]
 bagg(data = data, resp = &quot;num&quot;, n.boot = 30, min.obs=50)</code></pre>
-<pre><code>## [1] 15.90905</code></pre>
+<pre><code>## $error
+## [1] 15.90905
+## 
+## $`Importance Rank`
+##     time      age 
+## 8228.033 6299.178</code></pre>
 <p>check with package ‘ipred’:</p>
 <pre class="r"><code>bagging(
   formula = num ~ .,
@@ -432,7 +442,7 @@ bagg(data = data, resp = &quot;num&quot;, n.boot = 30, min.obs=50)</code></pre>
 <pre class="r"><code>nsample = c(10,20, 30,50, 70, 100)
 set.seed(123)
 rmse1 = sapply(nsample, function(n){
-  bagg(data = data, resp = &quot;num&quot;, n.boot = n, min.obs=50)
+  bagg(data = data, resp = &quot;num&quot;, n.boot = n, min.obs=50)$error
 })
 
 plot(nsample, rmse1)</code></pre>

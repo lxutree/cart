@@ -26,6 +26,10 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
   # list of features:
   if(is.null(feat)) feat = names(data)[names(data)!=resp] else feat = feat
   
+  # vector of features/gini index reduction for each split:
+  feat_vec = c()
+  gini_vec = c()
+  
   # iterative process:
   while(!stopsplit) {
     
@@ -42,7 +46,11 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
       
       # calculating gini index:
       for (i in 1:length(feat)){
-        data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+        data.gini = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
+        
+        # gini index of parent node
+        count = table(data.gini$resp)
+        gini_parent = 1 - sum((count / sum(count)) ^ 2)
         
         if( is.factor(data.gini$var) ) {
           data.gini.list = split(data.gini, data.gini$var)
@@ -83,6 +91,10 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
       
       # the feature with the lowest gini index is selected:
       split.var = feat[which.min(gini)]
+      gini_diff = gini_parent - min(gini, na.rm = TRUE)
+      
+      feat_vec = c(feat_vec, split.var)
+      gini_vec = c(gini_vec, gini_diff)
       
       # split data by the selected feature:
       if( is.factor(data.temp[[split.var]]) ) {
@@ -127,5 +139,10 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
     if(all(output$status != "split")) stopsplit = TRUE
   }
   
-  return(list(output = output, data.list = data.list))
+  gini_sum = c()
+  for (i in 1:length(feat)){
+    gini_sum[i] = sum(gini_vec[which(feat_vec == feat[i])])
+  }
+  
+  return(list(output = output, var_rank = data.frame(criterion = gini_sum, row.names = feat)))
 }

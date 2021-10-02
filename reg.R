@@ -1,4 +1,4 @@
-regtree <- function(data, resp, min.obs, feat = NULL){
+regtree <- function(data, resp, min.obs, feat = NULL, nfeat = round(sqrt(length(feat))), type = NULL){
 
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
@@ -25,7 +25,7 @@ regtree <- function(data, resp, min.obs, feat = NULL){
   iter = 1
   
   # list of features:
-  if(is.null(feat)) feat = names(data)[names(data)!=resp] else feat = feat
+  if(is.null(feat)) feat = allfeat = names(data)[names(data)!=resp]
   
   # vector of features/gini index reduction for each split:
   feat_vec = c()
@@ -45,48 +45,60 @@ regtree <- function(data, resp, min.obs, feat = NULL){
       
       data.temp = data.list[[j]]
       
-      # calculating gini index:
+      # for random forrest
+      if(!is.null(type)){if(type == "rf") feat = sample(allfeat, size = nfeat, replace = FALSE)}
+      
+      
       for (i in 1:length(feat)){
         data_sub = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
         
+        # gini index of parent node
         rss_parent = sum((data_sub$resp - mean(data_sub$resp))^2)
         
+        # calculating sse for categorical feature:
         if( is.factor(data_sub$var) ) {
           data.split = split(data_sub, data_sub$var)
           error[i] = sum(sapply(data.split, function(x){
             sum( (x$resp - mean(x$resp)) ^ 2 )
           })) 
           
+          # checking size of children nodes; if less than specified, the split is not considered
           count_min = min(sapply(data.split, nrow))
-          
           if( count_min < leafsize) error[i] = NA
 
         } else {
-          splits_sort = sort(unique(data_sub$var))
-          sse <- c() # vector of sses for each possible split
+        # calculating gini index for continuous feature:
+          splits_sort = sort(unique(data_sub$var)) # all possible splits
+          sse <- c() 
+          
+          # calculating sse for all possible splits
           for( k in 1:length(splits_sort)){
-            count_min = min(length(data_sub$resp[data_sub$var < splits_sort[k]]), length(data_sub$resp[data_sub$var >= splits_sort[k]]))
-             
             sse[k] = sum( (data_sub$resp[data_sub$var < splits_sort[k]] - mean(data_sub$resp[data_sub$var < splits_sort[k]]) )^2 ) + sum( (data_sub$resp[data_sub$var >= splits_sort[k]] - mean(data_sub$resp[data_sub$var >= splits_sort[k]]) )^2 ) 
+            
+            # checking size of children nodes; if less than specified, the split is not considered
+            count_min = min(length(data_sub$resp[data_sub$var < splits_sort[k]]), length(data_sub$resp[data_sub$var >= splits_sort[k]]))
             if(count_min < round(leafsize)) sse[k] = NA
           }
           
+          # clean up for when none of the splits is valid:
           if(all(is.na(sse))) {error[i] = NA; split_val[i] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[i] = splits_sort[which.min(sse)]}
         }
       }
       
-      splitvar = feat[which.min(error)]
-      rss_diff = rss_parent - min(error, na.rm = TRUE)
-      feat_vec = c(feat_vec, splitvar)
-      diff_vec = c(diff_vec, rss_diff)
+      # characteristics of the current split
+      splitvar = feat[which.min(error)] # feature leading to the lowest sse
+      rss_diff = rss_parent - min(error, na.rm = TRUE) # difference in rss
+      feat_vec = c(feat_vec, splitvar) # recorded in vector
+      diff_vec = c(diff_vec, rss_diff) # recorded in vector
       
-      
+      # creating children nodes:
       if( is.factor(data.temp[[splitvar]])) {
+        # for categorical feature:
         data.next = split(data.temp, data.temp[ , splitvar])
       } else {
-          splitvar = feat[which.min(error)]
-          value = split_val[which.min(error)]
+        # for continuous feature:
           index = which(sort(unique(data.temp[[splitvar]])) == value)
+          # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
           value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
           data.next = list()
           data.next[[1]] = data.temp[which(data.temp[[splitvar]] < value), ]
@@ -105,9 +117,10 @@ regtree <- function(data, resp, min.obs, feat = NULL){
         status
       })
       
-      # change current status:
+      # change current status from 'split' to 'parent' so it won't be split further:
       output$status[j] = "parent"
       
+      # record how the split was done:
       if( is.factor(data.temp[[splitvar]]) ) {
         splitrule = sapply(names(data.next), function(x){paste(splitvar, "=" , x)})
       } else {
@@ -117,8 +130,8 @@ regtree <- function(data, resp, min.obs, feat = NULL){
       # creating outputs
       temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}))
       
+      # attach new outputs to existing dataframe
       output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
-      
       names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
     }
     
@@ -127,11 +140,13 @@ regtree <- function(data, resp, min.obs, feat = NULL){
     
     iter = iter+1
   }
+  
+  # summing up RSS difference for each feature 
   rss_sum = c()
-  for (i in 1:length(feat)){
-    rss_sum[i] = sum(diff_vec[which(feat_vec == feat[i])])
+  for (i in 1:length(allfeat)){
+    rss_sum[i] = sum(diff_vec[which(feat_vec == allfeat[i])])
   }
   
-  return(list(output = output, var_rank = data.frame(criterion = rss_sum, row.names = feat)))
+  return(list(output = output, var_rank = data.frame(criterion = rss_sum, row.names = allfeat)))
 }
 

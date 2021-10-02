@@ -1,18 +1,21 @@
 # this is the function for boostrap aggregation
 
 bagg <- function(data, resp, n.boot = 10, min.obs, ...){
-  # start by drawing 'n.boot' bootstrap samples:
+  # resp and min.obs are arguments that will be passed onto the tree building functinos
+  
+  # vector of all features:
   feat = names(data)[names(data)!=resp]
+  
   data_list = index_list = list()
   pred = c()
-
+  
+  # start by drawing 'n.boot' bootstrap samples:
   for (i in 1:n.boot){
     # index of bootstrap sample:
     index_list[[i]] = sample(nrow(data),  replace = TRUE)
     
     # ith bootstrap sample:
     data_list[[i]] =data[index_list[[i]], ]
-    
   }
 
   # list of trees for each bootstrap sample
@@ -24,9 +27,10 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
     }
   })
   
-  # compute the average value/majority vote for each obs
+  # compute predictions for each obs in the dataset
   for (obs in 1:nrow(data)){
-    # list of trees that weren't built from this obs
+    # for obs i, gather list of trees that weren't built from this obs 
+    # only those trees will be used to predict
     ifoob = sapply(index_list, function(index){
       !(obs %in% index)
     })
@@ -34,43 +38,48 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
     if(class(data[, resp]) == "factor"){
       # for classification:
       pred_obs = lapply(1:length(tree_list), function(k){
+        # generate prediction from tree k if it didn't contain current obs
         if(ifoob[k] == TRUE) data.frame(resp = predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]]$output, data = data)[,resp]) else NA
       })
       pred_obs = na.omit.list(pred_obs)
       pred_obs = do.call(rbind, pred_obs)
       
+      # if no prediction was generated from any tree, set to NA
       if(is.null(pred_obs)) pred[obs] = NA else{
-        # find the majority vote
+        # other wise, find the majority vote
         pred[obs] = if(table(pred_obs)[1] != table(pred_obs)[2]){
           levels(pred_obs$resp)[which.max(table(pred_obs))]
         } else {
-        # If there's no majority, pick randomly
+        # If there's no majority, pick randomly with equal probabilities
           levels(pred_obs$resp)[sample(x = 2, size = 1, prob = c(0.5, 0.5))]
         } 
       }
     } else {
       # for regression:
+      # generate prediction from tree k if it didn't contain current obs
       pred_obs = sapply(1:length(tree_list), function(k){
         if(ifoob[k] == TRUE) predtree(newdata = data[obs, ], resp = resp, res = tree_list[[k]]$output, data = data)[,resp] else NA
       })
       
-      # compute the average of predictions
+      # if no prediction was generated from any tree, set to NA. Otherwise, compute the average of predictions
       if (all(is.na(pred_obs))) pred[obs] = NA else pred[obs]  = mean(pred_obs, na.rm = TRUE)
       
     }
     
   }
   if(class(data[, resp]) == "factor"){
+    # dataframe containing predicted and observed values:
     comb = data.frame(pred, observed= data[,resp])
     comb = na.omit(comb)
     
-    # find the rate of missclassification
+    # find the rate of missclassification for classification trees:
     error = mean(comb$pred != comb$observed)
   } else {
-    # compute rmse
+    # compute rmse for regression trees:
     error = sqrt(mean( (pred - data[,resp])^2, na.rm = TRUE))
   }
   
+  # Obtaining measures of varianble importance, then sorting from most important -> least important
   var_rank_mean = apply(sapply(tree_list, function(tree){ tree$var_rank$criterion}), MARGIN = 1, FUN = mean)
   names(var_rank_mean) = feat
   rank = sort(var_rank_mean, decreasing = TRUE)

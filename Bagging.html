@@ -383,11 +383,11 @@ source(&quot;reg.R&quot;)</code></pre>
 <p>Example 1. dataset ‘kyphosis’ with binary response:</p>
 <pre class="r"><code>bagg(data = kyphosis, resp = &quot;Kyphosis&quot;, n.boot = 30, min.obs=20)</code></pre>
 <pre><code>## $error
-## [1] 0.1851852
+## [1] 0.2469136
 ## 
 ## $`Importance Rank`
-##      Start        Age     Number 
-## 0.10236693 0.09385391 0.03918702</code></pre>
+##        Age      Start     Number 
+## 0.12527554 0.12055793 0.04795818</code></pre>
 <p>check with package ‘ipred’:</p>
 <pre class="r"><code>bagging(
   formula = Kyphosis ~ .,
@@ -396,7 +396,7 @@ source(&quot;reg.R&quot;)</code></pre>
   coob = TRUE,
   control = rpart.control(minsplit = 20, cp = -1)
 )$err</code></pre>
-<pre><code>## [1] 0.2222222</code></pre>
+<pre><code>## [1] 0.1728395</code></pre>
 <p>Plot of missclassification rate against the number of bootstrap samples:</p>
 <pre class="r"><code>nsample = c(10,20, 30,50, 70, 100)
 set.seed(123)

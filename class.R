@@ -1,4 +1,4 @@
-classtree <- function(data, resp, min.obs = 20, feat = NULL){
+classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = round(sqrt(length(feat))), type = NULL){
   
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
@@ -24,7 +24,7 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
   stopsplit = FALSE
   
   # list of features:
-  if(is.null(feat)) feat = names(data)[names(data)!=resp] else feat = feat
+  if(is.null(feat)) feat = allfeat = names(data)[names(data)!=resp]
   
   # vector of features/gini index reduction for each split:
   feat_vec = c()
@@ -44,14 +44,17 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
       
       data.temp = data.list[[j]]
       
+      # for random forrest
+      if(!is.null(type)){if(type == "rf") feat = sample(allfeat, size = nfeat, replace = FALSE)}
+      
       # calculating gini index:
       for (i in 1:length(feat)){
         data.gini = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
         
         # gini index of parent node
-        count = table(data.gini$resp)
         gini_parent = 1 - sum((count / sum(count)) ^ 2)
         
+        # calculating sse for categorical feature:
         if( is.factor(data.gini$var) ) {
           data.gini.list = split(data.gini, data.gini$var)
           gini[i] = sum(sapply(data.gini.list, function(x){
@@ -59,9 +62,16 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
             gini = 1 - sum((count / sum(count)) ^ 2)
             gini * sum(count)
           }) / nrow(data.gini))
+          
+          # checking size of children nodes; if less than specified, the split is not considered
+          count_min = min(sapply(data.gini.list, nrow))
+          if( count_min < leafsize) gini[i] = NA
           } else {
+            # calculating gini index for continuous feature:
             gini_splits = c()
             splits_sort = sort(unique(data.gini$var))
+            
+            # calculating sse for all possible splits
             for( k in 2:length(splits_sort)){
 
               data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
@@ -75,11 +85,12 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
                 gini * sum(count)
               }) / nrow(data.gini))
               
+              # checking size of children nodes; if less than specified, the split is not considered
               count_min = min(sapply(data.gini.list, nrow))
-              
               if(count_min < round(leafsize)) gini_splits[k-1] = NA
             }
             
+            # clean up for when none of the splits is valid:
             if(all(is.na(gini_splits))) {
               gini[i] = NA
               min_split[i] = NA
@@ -89,27 +100,31 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
           }
         }
       
-      # the feature with the lowest gini index is selected:
-      split.var = feat[which.min(gini)]
-      gini_diff = gini_parent - min(gini, na.rm = TRUE)
+      # characteristics of the current split
+      split.var = feat[which.min(gini)] # feature leading to the lowest gini index
+      gini_diff = gini_parent - min(gini, na.rm = TRUE) # difference in gini index
+      feat_vec = c(feat_vec, split.var) # recorded in vector
+      gini_vec = c(gini_vec, gini_diff) # recorded in vector
       
-      feat_vec = c(feat_vec, split.var)
-      gini_vec = c(gini_vec, gini_diff)
-      
-      # split data by the selected feature:
+      # creating children nodes by the selected feature:
       if( is.factor(data.temp[[split.var]]) ) {
+        # for categorical feature:
         data.next = split(data.temp, data.temp[ , split.var])
 
       } else {
+        # for continuous feature:
           split.val = min_split[which.min(gini)]
           index = which(sort(unique(data.temp[[split.var]])) == split.val)
+          # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
           split.val = (sort(unique(data.temp[[split.var]]))[index] + sort(unique(data.temp[[split.var]]))[index+1])/2
           data.next = list()
           data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
           data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
       }
       
-      
+      # Stopping criteria: 
+      # - less than 3 observations
+      # - all observations have the same label
       status = sapply(data.next, function(x){
           if (ncol(data.frame(x)) == 1 | length(unique(x[[resp]])) == 1 ) status = "leaf" else {
             if (nrow(x) < min.obs | nrow( unique(data.frame(x[, -which(names(x) %in% resp)])) ) == 1) status = "leaf" else status = "split"
@@ -118,16 +133,17 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
       })
       
       
-      # change current status:
+      # change current status from 'split' to 'parent' so it won't be split further:
       output$status[j] = "parent"
       
-      # creating outputs
+      # record how the split was done:
       split_rule =  if( is.factor(data.temp[[split.var]]) ) {
         sapply(names(data.next), function(x){paste(split.var, "=" , x)})
       } else {
         c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
       }
       
+      # attach new outputs to existing dataframe
       temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), prob = sapply(data.next, function(x){ table(x[[resp]])[1]}) / sapply(data.next,nrow), iter = output$iter[j] + 1, row.names = NULL)
       
       output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
@@ -139,10 +155,11 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL){
     if(all(output$status != "split")) stopsplit = TRUE
   }
   
+  # summing up gini index differences for each feature 
   gini_sum = c()
-  for (i in 1:length(feat)){
-    gini_sum[i] = sum(gini_vec[which(feat_vec == feat[i])])
+  for (i in 1:length(allfeat)){
+    gini_sum[i] = sum(gini_vec[which(feat_vec == allfeat[i])])
   }
   
-  return(list(output = output, var_rank = data.frame(criterion = gini_sum, row.names = feat)))
+  return(list(output = output, var_rank = data.frame(criterion = gini_sum, row.names = allfeat)))
 }

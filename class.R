@@ -1,4 +1,4 @@
-classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = round(sqrt(length(feat))), type = NULL){
+classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = NULL, type = NULL){
   
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
@@ -25,6 +25,7 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = round(sqrt
   
   # list of features:
   if(is.null(feat)) feat = allfeat = names(data)[names(data)!=resp]
+  if(is.null(nfeat)) nfeat = round(sqrt(length(feat)))
   
   # vector of features/gini index reduction for each split:
   feat_vec = c()
@@ -52,6 +53,7 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = round(sqrt
         data.gini = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
         
         # gini index of parent node
+        count = table(data.gini)
         gini_parent = 1 - sum((count / sum(count)) ^ 2)
         
         # calculating sse for categorical feature:
@@ -70,25 +72,29 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = round(sqrt
             # calculating gini index for continuous feature:
             gini_splits = c()
             splits_sort = sort(unique(data.gini$var))
-            
+
+             if (length(unique(splits_sort)) < 2) {gini[i] = NA; min_split[i] = NA}
+            else {
+               for( k in 2:length(splits_sort)){
+                 
+                 data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
+                 
+                 data.gini$var = cut(data.gini$var, breaks =c(splits_sort[1],mean(c(splits_sort[k-1], splits_sort[k])), max(splits_sort)+1 ), right=FALSE)
+                 
+                 data.gini.list = split(data.gini, data.gini$var)
+                 gini_splits[k-1] = sum(sapply(data.gini.list, function(x){
+                   count = table(x)
+                   gini = 1 - sum((count / sum(count)) ^ 2)
+                   gini * sum(count)
+                 }) / nrow(data.gini))
+                 
+                 # checking size of children nodes; if less than specified, the split is not considered
+                 count_min = min(sapply(data.gini.list, nrow))
+                 if(count_min < round(leafsize)) gini_splits[k-1] = NA
+               }      
+             }
             # calculating sse for all possible splits
-            for( k in 2:length(splits_sort)){
-
-              data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
-
-              data.gini$var = cut(data.gini$var, breaks =c(splits_sort[1],splits_sort[k], max(splits_sort)+1 ), right=FALSE)
-              
-              data.gini.list = split(data.gini, data.gini$var)
-              gini_splits[k-1] = sum(sapply(data.gini.list, function(x){
-                count = table(x)
-                gini = 1 - sum((count / sum(count)) ^ 2)
-                gini * sum(count)
-              }) / nrow(data.gini))
-              
-              # checking size of children nodes; if less than specified, the split is not considered
-              count_min = min(sapply(data.gini.list, nrow))
-              if(count_min < round(leafsize)) gini_splits[k-1] = NA
-            }
+            
             
             # clean up for when none of the splits is valid:
             if(all(is.na(gini_splits))) {

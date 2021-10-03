@@ -1,4 +1,4 @@
-regtree <- function(data, resp, min.obs, feat = NULL, nfeat = round(sqrt(length(feat))), type = NULL){
+regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL){
 
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
@@ -26,6 +26,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat = round(sqrt(length(
   
   # list of features:
   if(is.null(feat)) feat = allfeat = names(data)[names(data)!=resp]
+  if(is.null(nfeat)) nfeat = round(sqrt(length(feat)))
   
   # vector of features/gini index reduction for each split:
   feat_vec = c()

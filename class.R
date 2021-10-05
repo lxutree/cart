@@ -1,4 +1,7 @@
-classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = NULL, type = NULL){
+classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = NULL, type = NULL, depth = NULL){
+  # nfeat = number of features selected at random at each split
+  # feat = list of features 
+  # depth = maximum of terminal nodes allowed. This is equal to the number of splits + 1
   
   # minimum size of leaves?
   leafsize = min.obs/3 # same as the default in rpart
@@ -159,6 +162,9 @@ classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = NULL, type
     
     # check if there are remaining splits to be done:
     if(all(output$status != "split")) stopsplit = TRUE
+    
+    # to control the depth of the tree:
+    if(!is.null(depth)) {if (length(feat_vec) + 1 >= depth) stopsplit = TRUE  }
   }
   
   # summing up gini index differences for each feature 

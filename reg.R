@@ -102,6 +102,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
         data.next = split(data.temp, data.temp[ , splitvar])
       } else {
         # for continuous feature:
+          value = split_val[which.min(error)]
           index = which(sort(unique(data.temp[[splitvar]])) == value)
           # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
           value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2

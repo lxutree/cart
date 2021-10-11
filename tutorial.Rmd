@@ -27,8 +27,10 @@ Set working directory:
 
 ```{r}
 setwd("~/../LX_Project/cart/")
-
 # setwd("")
+
+# Load helper functions:
+source("helperfunctions.R")
 ```
 
 Load dataset:

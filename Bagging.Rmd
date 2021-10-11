@@ -20,7 +20,7 @@ library(ipred)
 source("bagg.R")
 source("class.R")
 source("reg.R")
-
+source("helperfunctions.R")
 ```
 
 The output of the bagging function 'bagg' is the rate of missclassification for binary response, or root mean square error for continuous response

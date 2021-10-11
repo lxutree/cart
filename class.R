@@ -1,4 +1,4 @@
-classtree <- function(data, resp, min.obs = 20, feat = NULL,  nfeat = NULL, type = NULL, depth = NULL){
+classtree <- function(data, resp, min.obs, feat = NULL,  nfeat = NULL, type = NULL, depth = NULL){
   # nfeat = number of features selected at random at each split
   # feat = list of features 
   # depth = maximum of terminal nodes allowed. This is equal to the number of splits + 1

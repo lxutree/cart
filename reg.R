@@ -57,7 +57,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
       for (i in 1:length(feat)){
         data_sub = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
         
-        # gini index of parent node
+        # rss index of parent node
         rss_parent = sum((data_sub$resp - mean(data_sub$resp))^2)
         
         # calculating sse for categorical feature:
@@ -107,7 +107,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
           # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
           value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
           data.next = list()
-          data.next[[1]] = data.temp[which(data.temp[[splitvar]] < value), ]
+          data.next[[1]] = data.temp[which(data.temp[[splitvar]] <= value), ]
           data.next[[2]] = data.temp[which(data.temp[[splitvar]] > value), ]
       }
       
@@ -130,7 +130,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
       if( is.factor(data.temp[[splitvar]]) ) {
         splitrule = sapply(names(data.next), function(x){paste(splitvar, "=" , x)})
       } else {
-        splitrule = c(paste(splitvar, "<", value),paste(splitvar, ">", value) )
+        splitrule = c(paste(splitvar, "<=", value),paste(splitvar, ">", value) )
       }
 
       # creating outputs

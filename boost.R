@@ -13,7 +13,7 @@ boost = function(data, resp, depth, iter, min.obs, rate, ...){
     pred_list = tree_list = importance_list = resid_list = list()
     
     # set first predictions to be the mean of the response
-    pred_list[[1]] = rep(mean(data[, resp]), nrow(data))
+    pred_list[[1]] = rep(0, nrow(data))
     
     # find the corresponding residuals
     resid_list[[1]] = data[, resp] - pred_list[[1]]
@@ -56,7 +56,7 @@ boost_pred = function(newdata, boost_object){
   data = boost_object$data
   pred_list = resid_list = list()
 
-  pred_list[[1]] = rep(mean(data[, resp]), nrow(newdata))
+  pred_list[[1]] = rep(0, nrow(newdata))
 
   resid_list[[1]] = newdata[, resp] - pred_list[[1]]
   

@@ -54,5 +54,8 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
   names(var_rank_mean) = feat
   rank = sort(var_rank_mean, decreasing = TRUE)
   
+  # re-scale the variable importance measures:
+  rank = rank/rank[1]
+  diff_error = diff_error/diff_error[1]
    return(list(error = error_original, "Importance by difference" = rank, "Importance with shuffle" = diff_error))
 }

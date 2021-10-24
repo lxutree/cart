@@ -42,8 +42,10 @@ boost = function(data, resp, depth, iter, min.obs, rate, ...){
     
     # average performance of each feature across all trees 
     importance = apply(do.call(cbind, importance_list), MARGIN = 1, mean)
+    importance = sort(importance, decreasing = TRUE)
+    importance = importance/importance[1]
     
-    return(list(pred = pred_list[[iter+1]], importance = data.frame(var = names(importance), influence = sort(importance, decreasing = TRUE)), trees = tree_list, resp = resp, data = data, rate = rate))
+    return(list(pred = pred_list[[iter+1]], importance = data.frame(var = names(importance), "Importance by difference" = importance), trees = tree_list, resp = resp, data = data, rate = rate))
   }
 }
 

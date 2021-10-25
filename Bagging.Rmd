@@ -1,5 +1,5 @@
 ---
-title: "CART example"
+title: "Bagging and random forrest examples"
 author: "Liang"
 date: "14/09/2021"
 output: html_document
@@ -18,10 +18,13 @@ library(ipred)
 
 # load functions
 source("bagg.R")
+source("rforest.R")
 source("class.R")
 source("reg.R")
 source("helperfunctions.R")
 ```
+
+# Bagging
 
 The output of the bagging function 'bagg' is the rate of missclassification for binary response, or root mean square error for continuous response
 
@@ -112,4 +115,10 @@ rmse2 = sapply(nsample, function(n){
 
 plot(nsample, rmse2)
 ```
+
+
+# Random Forest
+
+The random forest algorithm is very similar to that of bagging. The fundamental difference is that with random forest, a random subset of features are selected to split each node in a tree. 
+
 

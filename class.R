@@ -158,7 +158,12 @@ classtree <- function(data, resp, min.obs, feat = NULL,  nfeat = NULL, type = NU
       output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
       
       names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
-    }
+    
+      
+      
+      
+      
+      }
     
     # check if there are remaining splits to be done:
     if(all(output$status != "split")) stopsplit = TRUE

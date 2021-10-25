@@ -1,0 +1,84 @@
+---
+title: "Pseudocodes"
+author: "Liang"
+date: "12/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Regression tree:
+
+1. Set the full dataset as the root of the tree. 
+2. For each feature, find the sum of squared error (SSE)
+	- For a categorical feature, find the sum of SSEs within each level of the feature
+	- For a continuous feature, for each unique value split the data into two partitions, one smaller and determine the sum of SSEs within each partition
+	- Discard a potential split if any of the resulting nodes won't satisfy the minimum size (default can be set to 1/3 of the minimum node size)
+3. Use the feature with lowest SSE to split the current node
+4. Check the children nodes for the following conditions:
+	- Are there sufficient number of observations for each node? If not, set the node to 'leaf'
+	- Do the observations all have the same label? If yes, set the node to 'leaf'
+5. Mark the current node as 'parent'
+6. Repeat the above steps (2-5) for any remainder nodes that aren't 'leaf' or 'parent'
+
+### Classification tree:
+
+* The steps for a classification tree are similar to those for a regression tree. The main distinction is how the splits are done
+
+1. Set the full dataset as the root of the tree. 
+2. For each feature, find the sum of squared error (SSE)
+	- For a categorical feature, find the weighted sum of gini index within each level of the feature
+	- For a continuous feature, for each unique value split the data into two partitions, one smaller and determine the weighted sum of gini index within each partition
+	- Discard a potential split if any of the resulting nodes won't satisfy the minimum size (default can be set to 1/3 of the minimum node size)
+3. Use the feature with lowest gini index to split the current node
+4. Check the children nodes for the following conditions:
+	- Are there sufficient number of observations for each node? If not, set the node to 'leaf'
+	- Do the observations all have the same label? If yes, set the node to 'leaf'
+5. Mark the current node as 'parent'
+6. Repeat the above steps (2-5) for any remainder nodes that aren't 'leaf' or 'parent'
+
+
+### Bootstrap aggregation:
+
+1. Let K be the number of bootstrap samples and N be the total number of observations.
+2. For i in 1 to K,
+	- sample N observations randomly with replacement to generate the i^th^ bootstrap sample
+	- build a tree using the i^th^ bootstrap sample, using algorithms similar to those described above. 
+3. For j in 1 to N:
+	- generate a prediction for the j^th^ observation using all the trees that weren't built from the j^th^ observation
+		- for binary response, determine the majority vote. If there was no majority, choose randomly
+		- for continuous response, take the average of the predictions
+	- compare the prediction to the observed value
+4. Calculate the out of bag error
+	- for binary response, compute the rate of misclassification
+	- for continuous response, compute the root mean squared error 
+
+### Random forest:
+
+* The steps in random forest resemble those of bootstrap aggregation. However, for each split, only a random subset of features is considered.
+
+1. Let K be the number of bootstrap samples, N be the total number of observations, M be the number of features selected at random for each split. 
+2. For i in 1 to K,
+	- sample N observations randomly with replacement to generate the i^th^ bootstrap sample
+	- build a tree using the i^th^ bootstrap sample, using algorithms similar to those described above, but with a random subset of M features for each split. 
+	- For j in 1 to N:
+		- generate a prediction for the j^th^ observation using all the trees that weren't built from the j^th^ observation
+			- for binary response, determine the majority vote. If there was no majority, choose randomly
+			- for continuous response, take the average of the predictions
+		- compare the prediction to the observed value
+	- Calculate the out of bag error
+		- for binary response, compute the rate of misclassification
+		- for continuous response, compute the root mean squared error 
+
+### Boosting:
+
+1. Let K be the number of iterations, D be the depth of trees, and λ be the shrinking factor
+2. Let the initial predictions be 0 for all observations
+3. Let the residuals be the observed values
+4. For i in 2 to K:
+	- Build a tree using the residuals in the previous iteration with D splits in total (i.e. D + 1 terminal nodes)
+	- Generate predicted values from the tree 
+	- Update the predictions by adding the predicted values scaled by λ to the previous predictions
+	- Update the residuals using the new predictions

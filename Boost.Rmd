@@ -1,0 +1,52 @@
+---
+title: "Boosting examples"
+author: "Liang"
+date: "14/09/2021"
+output: html_document
+---
+  
+Set working directory:
+  
+```{r}
+setwd("~/../LX_Project/cart/")
+# setwd("")
+```
+
+```{r}
+library(MASS)
+library(gbm)
+
+# load functions
+source("boost.R")
+source("class.R")
+source("reg.R")
+source("helperfunctions.R")
+```
+
+# Bootsting
+
+Below is example of applying the boosting algorithm to the dataset 'Boston' from package 'MASS'. The relative importance of the features is as follows:
+```{r, echo=FALSE}
+myboost=boost(data = Boston[1:450, ], resp = "medv", depth = 4, iter = 100, min.obs = 20, rate = 0.1)
+myboost$importance
+barplot(height = myboost$importance$Importance.by.difference, names.arg = factor(myboost$importance$var,levels = myboost$importance$var), horiz = TRUE)
+```
+
+Now use the package 'gbm'
+```{r}
+gbmboost <- gbm(medv ∼ ., data = Boston[1:450, ], distribution = "gaussian", n.trees = 100 , n.minobsinnode = 20/3, bag.fraction = 1, interaction.depth = 3)
+summary(gbmboost)
+```
+
+Generate out of sample predictions with the custom function and 'gbm'. 
+```{r}
+mypred = boost_pred(newdata = Boston[451:506,], myboost)
+gbmpred = predict(gbmboost, newdata = Boston[451:506,])
+```
+
+The rmses are similar:
+```{r}
+mean((mypred - Boston[451:506, "medv"])^2)
+mean((gbmpred - Boston[451:506, "medv"])^2)
+```
+

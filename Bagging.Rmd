@@ -15,6 +15,7 @@ setwd("~/../LX_Project/cart/")
 ```{r}
 library(rpart)
 library(ipred)
+library(MASS)
 
 # load functions
 source("bagg.R")
@@ -121,4 +122,8 @@ plot(nsample, rmse2)
 
 The random forest algorithm is very similar to that of bagging. The fundamental difference is that with random forest, a random subset of features are selected to split each node in a tree. 
 
-
+```{r}
+myrf = rforest(data = Boston, resp = "medv", n.boot = 100, min.obs = 50)
+myrf$`Importance by difference`
+myrf$`Importance by difference`
+```

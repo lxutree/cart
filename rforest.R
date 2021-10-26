@@ -3,7 +3,7 @@
 #  - The fundamental difference is that with random forest, a random subset of features are selected to split each node in a tree. 
 #  - The random selection of features is done through the argument "type = 'rf'", which tells the function to randomly select a subset of features at each split
 
-rforest <- function(data, resp, n.boot = 10, min.obs, ...){
+rforest <- function(data, resp, n.boot = 10, min.obs, nfeat = NULL, ...){
   # start by drawing 'n.boot' bootstrap samples:
   feat = names(data)[names(data)!=resp]
   data_list = index_list = list()
@@ -22,10 +22,10 @@ rforest <- function(data, resp, n.boot = 10, min.obs, ...){
   tree_list = lapply(data_list, function(data_i){
     if(class(data_i[, resp]) == "factor"){
       # !!! type = 'rf' for random forest
-      classtree(data = data_i, resp = resp, min.obs = min.obs, type = "rf")
+      classtree(data = data_i, resp = resp, min.obs = min.obs, nfeat = nfeat, type = "rf")
     } else {
       # !!! type = 'rf' for random forest
-      regtree(data = data_i, resp = resp, min.obs = min.obs, type = "rf")
+      regtree(data = data_i, resp = resp, min.obs = min.obs, nfeat = nfeat, type = "rf")
     }
   })
   

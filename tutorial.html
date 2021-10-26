@@ -716,14 +716,10 @@ rpart(readm ~., data = data,  minsplit = 3, cp=-1)</code></pre>
 <pre class="r"><code>source(&quot;reg.R&quot;)
 data = read.csv(&quot;Datasets/data_cart_rerg_step.csv&quot;, row.names = 1)
 regtree(data = data, resp = &quot;time&quot;, min.obs = 3)$output</code></pre>
-<pre><code>##    status count      split.rule iter     mean
-## 1  parent    10            root    0 4.600000
-## 2  parent     5 gender = Female    1 6.200000
-## 3    leaf     3     change = Ch    2 9.333333
-## 4    leaf     2     change = No    2 1.500000
-## 31 parent     5   gender = Male    1 3.000000
-## 11   leaf     3     change = Ch    3 2.333333
-## 21   leaf     2     change = No    3 4.000000</code></pre>
+<pre><code>##   status count      split.rule iter mean
+## 1 parent    10            root    0  4.6
+## 2  split     5 gender = Female    1  6.2
+## 3  split     5   gender = Male    1  3.0</code></pre>
 <p>Check the function against ‘rpart’:</p>
 <pre class="r"><code>rpart(time ~., data = data, minsplit = 3, cp=-1)</code></pre>
 <pre><code>## n= 10 
@@ -760,20 +756,10 @@ rpart(num ~., data = data, minsplit = 50, cp=-1)</code></pre>
 ##       14) time&lt; 4.5 17  2841.765 48.88235 *
 ##       15) time&gt;=4.5 47  8565.319 58.59574 *</code></pre>
 <pre class="r"><code>regtree(data=data, resp = &quot;num&quot;, min.obs = 50)$output</code></pre>
-<pre><code>##    status count             split.rule iter     mean
-## 1  parent   200                   root    0 48.17500
-## 2  parent    80             time &lt; 3.5    1 40.82500
-## 3    leaf    21 age &lt; 48.9150784339291    2 43.57143
-## 4  parent    59 age &gt; 48.9150784339291    2 39.84746
-## 11   leaf    17 age &lt; 55.4799632949289    3 35.05882
-## 21   leaf    42 age &gt; 55.4799632949289    3 41.78571
-## 31 parent   120             time &gt; 3.5    1 53.07500
-## 12 parent    64 age &lt; 69.4001732207834    4 56.01562
-## 13   leaf    17             time &lt; 4.5    5 48.88235
-## 23   leaf    47             time &gt; 4.5    5 58.59574
-## 22 parent    56 age &gt; 69.4001732207834    4 49.71429
-## 14   leaf    22 age &lt; 75.5044102831743    6 43.40909
-## 24   leaf    34 age &gt; 75.5044102831743    6 53.79412</code></pre>
+<pre><code>##   status count  split.rule iter   mean
+## 1 parent   200        root    0 48.175
+## 2  split    80 time &lt;= 3.5    1 40.825
+## 3  split   120  time &gt; 3.5    1 53.075</code></pre>
 </div>
 
 

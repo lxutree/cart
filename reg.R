@@ -90,64 +90,71 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
         }
       }
       
-      # characteristics of the current split
-      splitvar = feat[which.min(error)] # feature leading to the lowest sse
-      rss_diff = rss_parent - min(error, na.rm = TRUE) # difference in rss
-      feat_vec = c(feat_vec, splitvar) # recorded in vector
-      diff_vec = c(diff_vec, rss_diff) # recorded in vector
-      
-      # creating children nodes:
-      if( is.factor(data.temp[[splitvar]])) {
-        # for categorical feature:
-        data.next = split(data.temp, data.temp[ , splitvar])
-      } else {
-        # for continuous feature:
-          value = split_val[which.min(error)]
-          index = which(sort(unique(data.temp[[splitvar]])) == value)
-          # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
-          value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
-          data.next = list()
-          data.next[[1]] = data.temp[which(data.temp[[splitvar]] <= value), ]
-          data.next[[2]] = data.temp[which(data.temp[[splitvar]] > value), ]
+      if(all(is.na(error))){
+        # if none of the splits is good, consider the current node to 'leaf'
+        output$status[j] = "leaf"
       }
       
-
-      # Stopping criteria: 
-      # - less than 3 observations
-      # - all observations have the same label
-      status = sapply(data.next, function(x){
-        if (ncol(x) > 2) {
-          if (nrow(x) < min.obs | nrow( unique(x[, -which(names(x) %in% resp)]) ) == 1) status = "leaf" else status = "split" 
-        } else status = "leaf"
+      {
+        # characteristics of the current split
+        splitvar = feat[which.min(error)] # feature leading to the lowest sse
+        rss_diff = rss_parent - min(error, na.rm = TRUE) # difference in rss
+        feat_vec = c(feat_vec, splitvar) # recorded in vector
+        diff_vec = c(diff_vec, rss_diff) # recorded in vector
         
-        status
-      })
+        # creating children nodes:
+        if( is.factor(data.temp[[splitvar]])) {
+          # for categorical feature:
+          data.next = split(data.temp, data.temp[ , splitvar])
+        } else {
+          # for continuous feature:
+            value = split_val[which.min(error)]
+            index = which(sort(unique(data.temp[[splitvar]])) == value)
+            # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
+            value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
+            data.next = list()
+            data.next[[1]] = data.temp[which(data.temp[[splitvar]] <= value), ]
+            data.next[[2]] = data.temp[which(data.temp[[splitvar]] > value), ]
+        }
+        
+  
+        # Stopping criteria: 
+        # - less than 3 observations
+        # - all observations have the same label
+        status = sapply(data.next, function(x){
+          if (ncol(x) > 2) {
+            if (nrow(x) < min.obs | nrow( unique(x[, -which(names(x) %in% resp)]) ) == 1) status = "leaf" else status = "split" 
+          } else status = "leaf"
+          
+          status
+        })
+        
+        # change current status from 'split' to 'parent' so it won't be split further:
+        output$status[j] = "parent"
+        
+        # record how the split was done:
+        if( is.factor(data.temp[[splitvar]]) ) {
+          splitrule = sapply(names(data.next), function(x){paste(splitvar, "=" , x)})
+        } else {
+          splitrule = c(paste(splitvar, "<=", value),paste(splitvar, ">", value) )
+        }
+  
+        # creating outputs
+        temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}))
+        
+        # attach new outputs to existing dataframe
+        output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
+        names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
       
-      # change current status from 'split' to 'parent' so it won't be split further:
-      output$status[j] = "parent"
       
-      # record how the split was done:
-      if( is.factor(data.temp[[splitvar]]) ) {
-        splitrule = sapply(names(data.next), function(x){paste(splitvar, "=" , x)})
-      } else {
-        splitrule = c(paste(splitvar, "<=", value),paste(splitvar, ">", value) )
-      }
-
-      # creating outputs
-      temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = iter, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}))
+      # check if there are remaining splits to be done:
+      if(all(output$status != "split")) stopsplit = TRUE
       
-      # attach new outputs to existing dataframe
-      output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
-      names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
+      # to control the depth of the tree
+      if(!is.null(depth)) {if (length(feat_vec) + 1 >= depth) stopsplit = TRUE  }
+      
+      iter = iter+1
     }
-    
-    # check if there are remaining splits to be done:
-    if(all(output$status != "split")) stopsplit = TRUE
-    
-    # to control the depth of the tree
-    if(!is.null(depth)) {if (length(feat_vec) + 1 >= depth) stopsplit = TRUE  }
-    
-    iter = iter+1
   }
   
   # summing up RSS difference for each feature 
@@ -159,3 +166,4 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
   return(list(output = output, var_rank = data.frame(criterion = rss_sum, row.names = allfeat)))
 }
 
+}

@@ -109,60 +109,67 @@ classtree <- function(data, resp, min.obs, feat = NULL,  nfeat = NULL, type = NU
           }
         }
       
-      # characteristics of the current split
-      split.var = feat[which.min(gini)] # feature leading to the lowest gini index
-      gini_diff = gini_parent - min(gini, na.rm = TRUE) # difference in gini index
-      feat_vec = c(feat_vec, split.var) # recorded in vector
-      gini_vec = c(gini_vec, gini_diff) # recorded in vector
-      
-      # creating children nodes by the selected feature:
-      if( is.factor(data.temp[[split.var]]) ) {
-        # for categorical feature:
-        data.next = split(data.temp, data.temp[ , split.var])
-
-      } else {
-        # for continuous feature:
-          split.val = min_split[which.min(gini)]
-          index = which(sort(unique(data.temp[[split.var]])) == split.val)
-          # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
-          split.val = (sort(unique(data.temp[[split.var]]))[index] + sort(unique(data.temp[[split.var]]))[index+1])/2
-          data.next = list()
-          data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
-          data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
+      if(all(is.na(gini))){
+        # if none of the splits is good, consider the current node to 'leaf'
+        output$status[j] = "leaf"
       }
       
-      # Stopping criteria: 
-      # - less than 3 observations
-      # - all observations have the same label
-      status = sapply(data.next, function(x){
-          if (ncol(data.frame(x)) == 1 | length(unique(x[[resp]])) == 1 ) status = "leaf" else {
-            if (nrow(x) < min.obs | nrow( unique(data.frame(x[, -which(names(x) %in% resp)])) ) == 1) status = "leaf" else status = "split"
-          }
-        status
-      })
+      {
+        # characteristics of the current split
+        split.var = feat[which.min(gini)] # feature leading to the lowest gini index
+        gini_diff = gini_parent - min(gini, na.rm = TRUE) # difference in gini index
+        feat_vec = c(feat_vec, split.var) # recorded in vector
+        gini_vec = c(gini_vec, gini_diff) # recorded in vector
+        
+        # creating children nodes by the selected feature:
+        if( is.factor(data.temp[[split.var]]) ) {
+          # for categorical feature:
+          data.next = split(data.temp, data.temp[ , split.var])
+  
+        } else {
+          # for continuous feature:
+            split.val = min_split[which.min(gini)]
+            index = which(sort(unique(data.temp[[split.var]])) == split.val)
+            # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
+            split.val = (sort(unique(data.temp[[split.var]]))[index] + sort(unique(data.temp[[split.var]]))[index+1])/2
+            data.next = list()
+            data.next[[1]] = data.temp[which(data.temp[[split.var]] <= split.val), ]
+            data.next[[2]] = data.temp[which(data.temp[[split.var]] > split.val), ]
+        }
+        
+        # Stopping criteria: 
+        # - less than 3 observations
+        # - all observations have the same label
+        status = sapply(data.next, function(x){
+            if (ncol(data.frame(x)) == 1 | length(unique(x[[resp]])) == 1 ) status = "leaf" else {
+              if (nrow(x) < min.obs | nrow( unique(data.frame(x[, -which(names(x) %in% resp)])) ) == 1) status = "leaf" else status = "split"
+            }
+          status
+        })
+        
+        
+        # change current status from 'split' to 'parent' so it won't be split further:
+        output$status[j] = "parent"
+        
+        # record how the split was done:
+        split_rule =  if( is.factor(data.temp[[split.var]]) ) {
+          sapply(names(data.next), function(x){paste(split.var, "=" , x)})
+        } else {
+          c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
+        }
+        
+        # attach new outputs to existing dataframe
+        temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), prob = sapply(data.next, function(x){ table(x[[resp]])[1]}) / sapply(data.next,nrow), iter = output$iter[j] + 1, row.names = NULL)
+        
+        output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
+        
+        names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
       
-      
-      # change current status from 'split' to 'parent' so it won't be split further:
-      output$status[j] = "parent"
-      
-      # record how the split was done:
-      split_rule =  if( is.factor(data.temp[[split.var]]) ) {
-        sapply(names(data.next), function(x){paste(split.var, "=" , x)})
-      } else {
-        c(paste(split.var, " <= ", split.val),  paste(split.var, " > ", split.val))
-      }
-      
-      # attach new outputs to existing dataframe
-      temp.output = data.frame(status = status, count = sapply(data.next, function(x) nrow(data.frame(x))), "split rule" = split_rule, "response" = paste(levels(data[[resp]])[1], ":", sapply(data.next, function(x){ table(x[[resp]])[1]}), "/", sapply(data.next,nrow)), prob = sapply(data.next, function(x){ table(x[[resp]])[1]}) / sapply(data.next,nrow), iter = output$iter[j] + 1, row.names = NULL)
-      
-      output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
-      
-      names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
-    
-      
-      
-      
-      
+        
+        
+        
+        
+        }
       }
     
     # check if there are remaining splits to be done:

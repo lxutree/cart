@@ -112,9 +112,7 @@ classtree <- function(data, resp, min.obs, feat = NULL,  nfeat = NULL, type = NU
       if(all(is.na(gini))){
         # if none of the splits is good, consider the current node to 'leaf'
         output$status[j] = "leaf"
-      }
-      
-      {
+      } else {
         # characteristics of the current split
         split.var = feat[which.min(gini)] # feature leading to the lowest gini index
         gini_diff = gini_parent - min(gini, na.rm = TRUE) # difference in gini index

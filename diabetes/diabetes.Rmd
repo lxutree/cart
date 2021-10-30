@@ -1,40 +1,56 @@
+---
+title: "Diabetes"
+author: "Liang"
+date: "26/10/2021"
+output: html_document
+---
+
+### Data cleaning
+```{r}
+# working directory
 setwd("~/../LX_Project/cart/diabetes/")
 
 library(stringr)
 library(ggplot2)
+library(rpart) 
 
+source("../class.R") # load cart function
+
+## read data:
 data = read.csv(file = "diabetic_data.csv")
 
-# exclusinos
-# 1. only keep first obs from the same patient
+## exclusions
+# 1. only keep first obs from the same patient (with the same unique_id)
 unique_id = sapply(unique(data$patient_nbr), FUN = function(x){
   which(data$patient_nbr == x)[1]
 })
-
 data = data[unique_id, ]
 
-# can delete encounter_id now
+# delete encounter_id now
 data$encounter_id <- NULL
-
-data$weight <- NULL
-data$payer_code <- NULL
 
 # 2. remove patients that entered hospice or passed away after discharge
 data = data[ -which(data$discharge_disposition_id %in% c(11, 13, 14, 19, 20, 21)), ]
 
+# check missing data:
+apply(data, MARGIN = 2, FUN = function(x){length(which(x == "?"))})
+# 'medical_specialty', 'weight' and 'payer_code' have lots of missing data
+
+# remove the variables 'weight' and 'payer_code'
+data$weight <- NULL
+data$payer_code <- NULL
+
 nrow(data)
 # 69973, which is 11 less than the value reported in the paper (69984)
 
-# re-coding:
+# re-coding some of the variables:
 data$readmitted = as.factor(ifelse(data$readmitted == "<30", "YES", "NO"))
-data$A1Cresult
 
 data$A1Cresult = as.factor(ifelse(data$A1Cresult %in% c("Norm", ">7"), "Normal", ifelse(data$A1Cresult == "None", "None", ifelse(data$change == "Ch", "high_ch", "high_noch"))))
 
 data$discharge_disposition_id = as.factor(ifelse(data$discharge_disposition_id == 1, "Home", "Other"))
 
 data$admission_source_id = as.factor(ifelse(data$admission_source_id == 7, "Emergency", ifelse(data$admission_source_id %in% c(1,2), "Referral", "Other")))
-
 
 data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty == "Cardiology-Pediatric", "Cardiology")
 
@@ -52,7 +68,6 @@ data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty
 data$medical_specialty <- str_replace(data$medical_specialty, "SurgicalSpecialty", "Surgery")
 data$medical_specialty[which(data$medical_specialty == "?")] = "Missing or Unknown" 
 data$medical_specialty[which(!(data$medical_specialty %in% c("InternalMedicine", "Cardiology", "Surgery", "Family/GeneralPractice", "Missing or Unknown")))] = "Other" 
-
 diag_diabetes = levels(data$diag_1)[which(substr(levels(data$diag_1), 1, 3)==250)]
 diag_other = levels(data$diag_1)[which(!(levels(data$diag_1) %in% c(390:459, 785, diag_diabetes, 460:519, 786, 520:579, 787, 800:999, 710:739, 580:629, 788, 140:239)))]
 levels(data$diag_1) <- list(
@@ -67,7 +82,6 @@ levels(data$diag_1) <- list(
   "Other" = diag_other
   )
 
-
 levels(data$race) = list("Missing" = "?", "Other" = c("Other", "Asian", "Hispanic"), "African American" = "AfricanAmerican", "Caucasian" = "Caucasian" )
 
 data$age_num = data$age
@@ -80,6 +94,7 @@ levels(data$age) = list("< 30" = c("[0-10)", "[10-20)", "[20-30)" ), "[30, 60)" 
 data$medical_specialty <- as.factor(data$medical_specialty)
 data$medical_specialty <-droplevels(data$medical_specialty)
 
+# change the baseline level for some factors:
 data$race = relevel(data$race, ref = "African American")
 
 data$age = relevel(data$age, ref = "[30, 60)") 
@@ -88,125 +103,50 @@ data$diag_1 = relevel(data$diag_1, ref = "Diabetes")
 
 data$A1Cresult =  relevel(data$A1Cresult, ref = "None") 
 
-
 # tables:
-table(data$A1Cresult, data$readmitted)
+HbA1c = as.data.frame(cbind("HbA1c", levels(data$A1Cresult), table(data$A1Cresult),  (table(data$A1Cresult))/nrow(data), table(data$A1Cresult, data$readmitted)[, 2], table(data$A1Cresult, data$readmitted)[, 2]/table(data$A1Cresult)))
 
-table(data$gender, data$readmitted)
+gender = as.data.frame(cbind("gender", levels(data$gender), table(data$gender),  (table(data$gender))/nrow(data), table(data$gender, data$readmitted)[, 2], table(data$gender, data$readmitted)[, 2]/table(data$gender)))
 
-table(data$discharge_disposition_id, data$readmitted)
+discharge = as.data.frame(cbind("discharge", levels(data$discharge_disposition_id), table(data$discharge_disposition_id),  (table(data$discharge_disposition_id))/nrow(data), table(data$discharge_disposition_id, data$readmitted)[, 2], table(data$discharge_disposition_id, data$readmitted)[, 2]/table(data$discharge_disposition_id)))
 
-table(data$admission_source_id, data$readmitted)
+admission = as.data.frame(cbind("admission", levels(data$admission_source_id), table(data$admission_source_id),  (table(data$admission_source_id))/nrow(data), table(data$admission_source_id, data$readmitted)[, 2], table(data$admission_source_id, data$readmitted)[, 2]/table(data$admission_source_id)))
 
-table(data$medical_specialty, data$readmitted)
+specialty = as.data.frame(cbind("specialty", levels(data$medical_specialty), table(data$medical_specialty),  (table(data$medical_specialty))/nrow(data), table(data$medical_specialty, data$readmitted)[, 2], table(data$medical_specialty, data$readmitted)[, 2]/table(data$medical_specialty)))
 
-table(data$diag_1, data$readmitted)
+diagnosis = as.data.frame(cbind("diagnosis", levels(data$diag_1), table(data$diag_1),  (table(data$diag_1))/nrow(data), table(data$diag_1, data$readmitted)[, 2], table(data$diag_1, data$readmitted)[, 2]/table(data$diag_1)))
 
-table(data$race, data$readmitted)
+race = as.data.frame(cbind("race", levels(data$race), table(data$race),  (table(data$race))/nrow(data), table(data$race, data$readmitted)[, 2], table(data$race, data$readmitted)[, 2]/table(data$race)))
 
-table(data$age, data$readmitted)
+age = as.data.frame(cbind("age", levels(data$age), table(data$age),  (table(data$age))/nrow(data), table(data$age, data$readmitted)[, 2], table(data$age, data$readmitted)[, 2]/table(data$age)))
+
+summarytable = rbind(HbA1c, gender, discharge, admission, specialty, diagnosis, race, age)
+names(summarytable) = c("Variable", "Level", "# of encounters", "% of population", "# of encounters (readmitted)", "% in group (readmitted)")
+row.names(summarytable) = NULL
+summarytable$`% of population` = as.numeric(as.character(summarytable$`% of population`))
+summarytable$`% in group (readmitted)` = as.numeric(as.character(summarytable$`% in group (readmitted)`))
+summarytable$`% of population` = round((summarytable$`% of population`)* 100, digits = 2)
+summarytable$`% in group (readmitted)` = round((summarytable$`% in group (readmitted)`)* 100, digits = 2)
+summarytable
 
 mean(data$age_num)
 quantile(data$age_num, probs = c(0.5, 0.25, 0.75))
 
 mean(data$time_in_hospital)
 quantile(data$time_in_hospital, probs = c(0.5, 0.25, 0.75))
+```
 
-
-
-
-
+### Logistic regression
+```{r}
 fit = glm(readmitted ~ discharge_disposition_id + race + admission_source_id + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge_disposition_id + race * discharge_disposition_id + medical_specialty*discharge_disposition_id + discharge_disposition_id*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, family = "binomial", data = data)
 
 summary(fit)
+```
 
-data_subset = data[, c("readmitted", 'discharge_disposition_id','race' , "admission_source_id" , "medical_specialty" , "time_in_hospital" , "age" , "diag_1" , "A1Cresult", "age_num")]
+### classification tree 1
+```{r}
+data_subset = data[, c("readmitted", 'discharge_disposition_id','race' , "admission_source_id" , "medical_specialty" , "time_in_hospital" , "age" , "diag_1" , "A1Cresult")]
 
 tree1 = classtree(data = data_subset, resp = "readmitted", min.obs = 100)
-
-discharge = as.data.frame(model.matrix( ~discharge_disposition_id - 1,  data = data_subset))
-names(discharge) = paste("discharge:", levels(data_subset$discharge_disposition_id))
-
-race = as.data.frame(model.matrix( ~race - 1,  data = data_subset))
-names(race) = paste("race:", levels(data_subset$race))
-
-admission = as.data.frame(model.matrix( ~admission_source_id - 1,  data = data_subset))
-names(admission) = paste("admission:", levels(data_subset$admission_source_id))
-
-specialty = as.data.frame(model.matrix( ~medical_specialty - 1,  data = data_subset))
-names(specialty) = paste("specialty:", levels(data_subset$medical_specialty))
-
-age = as.data.frame(model.matrix( ~age - 1,  data = data_subset))
-names(age) = paste("age:", levels(data_subset$age))
-
-diagnosis = as.data.frame(model.matrix( ~diag_1 - 1,  data = data_subset))
-names(diagnosis) = paste("diagnosis:", levels(data_subset$diag_1))
-
-A1Cresult = as.data.frame(model.matrix( ~A1Cresult - 1,  data = data_subset))
-names(A1Cresult) = paste("A1Cresult:", levels(data_subset$A1Cresult))
-
-data_factor = cbind(discharge, race, admission, specialty, age, diagnosis, A1Cresult)
-
-for(i in 1:ncol(data_factor)){
-  data_factor[,i] = factor(data_factor[,i], labels = c("no", "yes"))
-}
-data_subset = cbind(data_factor, "time_in_hospital" = data_subset$time_in_hospital, "readmitted" = data_subset$readmitted)
-
-tree2 = classtree(data = data_subset, resp = "readmitted", min.obs = 100)
-rpart1 = rpart(readmitted ~., data = data_subset, minsplit = 100, cp=-1)
-
-
-
-fit2 = glm(readmitted ~ discharge_disposition_id + race + admission_source_id + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, family = "binomial", data = data)
-
-
-
-
-
-### turning categorical variables into binary variables?
-```{r}
-discharge = as.data.frame(model.matrix( ~discharge_disposition_id - 1,  data = data_subset))
-names(discharge) = paste("discharge:", levels(data_subset$discharge_disposition_id))
-
-race = as.data.frame(model.matrix( ~race - 1,  data = data_subset))
-names(race) = paste("race:", levels(data_subset$race))
-
-admission = as.data.frame(model.matrix( ~admission_source_id - 1,  data = data_subset))
-names(admission) = paste("admission:", levels(data_subset$admission_source_id))
-
-specialty = as.data.frame(model.matrix( ~medical_specialty - 1,  data = data_subset))
-names(specialty) = paste("specialty:", levels(data_subset$medical_specialty))
-
-age = as.data.frame(model.matrix( ~age - 1,  data = data_subset))
-names(age) = paste("age:", levels(data_subset$age))
-
-diagnosis = as.data.frame(model.matrix( ~diag_1 - 1,  data = data_subset))
-names(diagnosis) = paste("diagnosis:", levels(data_subset$diag_1))
-
-A1Cresult = as.data.frame(model.matrix( ~A1Cresult - 1,  data = data_subset))
-names(A1Cresult) = paste("A1Cresult:", levels(data_subset$A1Cresult))
-
-data_factor = cbind(discharge, race, admission, specialty, age, diagnosis, A1Cresult)
-
-for(i in 1:ncol(data_factor)){
-  data_factor[,i] = factor(data_factor[,i], labels = c("no", "yes"))
-}
-data_subset = cbind(data_factor, "time_in_hospital" = data_subset$time_in_hospital, "readmitted" = data_subset$readmitted)
+tree1$var_rank
 ```
-
-### classification tree 2
-```{r}
-tree2 = classtree(data = data_subset, resp = "readmitted", min.obs = 100)
-tree2$var_rank
-```
-
-
-### rpart
-```{r, echo=FALSE}
-rpart1 = rpart(readmitted ~., data = data, minsplit = 100, cp=-1)
-rpart2 = rpart(readmitted ~., data = data_subset, minsplit = 100, cp=-1)
-summary(rpart1)
-summary(rpart2)
-```
-
-

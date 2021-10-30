@@ -93,9 +93,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
       if(all(is.na(error))){
         # if none of the splits is good, consider the current node to 'leaf'
         output$status[j] = "leaf"
-      }
-      
-      {
+      } else {
         # characteristics of the current split
         splitvar = feat[which.min(error)] # feature leading to the lowest sse
         rss_diff = rss_parent - min(error, na.rm = TRUE) # difference in rss

@@ -5,19 +5,28 @@ date: "26/10/2021"
 output: html_document
 ---
 
-### Data cleaning
-```{r}
+This document aims to present the general steps for analyzing binary data. Data will be processed and analyzed as in Strack B. et al. [1].
+
+### 1. Data Inspection
+```{r, echo=FALSE}
 # working directory
 setwd("~/../LX_Project/cart/diabetes/")
 
 library(stringr)
 library(ggplot2)
 library(rpart) 
+library(gbm)
+library(pROC)
+library(caret)
+library(rms)
+library(rpart)
+library(ipred)
+library(randomForest)
 
 source("../class.R") # load cart function
 
 ## read data:
-data = read.csv(file = "diabetic_data.csv")
+data = read.csv(file = "diabetic_data.csv", stringsAsFactors = TRUE)
 
 ## exclusions
 # 1. only keep first obs from the same patient (with the same unique_id)
@@ -41,8 +50,13 @@ data$weight <- NULL
 data$payer_code <- NULL
 
 nrow(data)
-# 69973, which is 11 less than the value reported in the paper (69984)
+# 69973, which is 11 less than the value reported (69984)
+```
 
+### Coding of predictors
+
+The predictors are coded following the steps outlined in the paper.
+```{r}
 # re-coding some of the variables:
 data$readmitted = as.factor(ifelse(data$readmitted == "<30", "YES", "NO"))
 
@@ -55,6 +69,7 @@ data$admission_source_id = as.factor(ifelse(data$admission_source_id == 7, "Emer
 data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty == "Cardiology-Pediatric", "Cardiology")
 
 data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty == "Surgeon", "SurgicalSpecialty")
+
 data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty == "Surgery-Cardiovascular/Thoracic", "SurgicalSpecialty")
 data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty == "Surgery-Colon&Rectal", "SurgicalSpecialty")
 data$medical_specialty <- replace(data$medical_specialty, data$medical_specialty == "Surgery-General", "SurgicalSpecialty")
@@ -120,6 +135,8 @@ race = as.data.frame(cbind("race", levels(data$race), table(data$race),  (table(
 
 age = as.data.frame(cbind("age", levels(data$age), table(data$age),  (table(data$age))/nrow(data), table(data$age, data$readmitted)[, 2], table(data$age, data$readmitted)[, 2]/table(data$age)))
 
+names(data)[7] <- "source"
+names(data)[6] <- "discharge"
 summarytable = rbind(HbA1c, gender, discharge, admission, specialty, diagnosis, race, age)
 names(summarytable) = c("Variable", "Level", "# of encounters", "% of population", "# of encounters (readmitted)", "% in group (readmitted)")
 row.names(summarytable) = NULL
@@ -129,6 +146,7 @@ summarytable$`% of population` = round((summarytable$`% of population`)* 100, di
 summarytable$`% in group (readmitted)` = round((summarytable$`% in group (readmitted)`)* 100, digits = 2)
 summarytable
 
+# mean and quantiles for numeric variables age and time in hospital:
 mean(data$age_num)
 quantile(data$age_num, probs = c(0.5, 0.25, 0.75))
 
@@ -136,17 +154,267 @@ mean(data$time_in_hospital)
 quantile(data$time_in_hospital, probs = c(0.5, 0.25, 0.75))
 ```
 
-### Logistic regression
-```{r}
-fit = glm(readmitted ~ discharge_disposition_id + race + admission_source_id + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge_disposition_id + race * discharge_disposition_id + medical_specialty*discharge_disposition_id + discharge_disposition_id*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, family = "binomial", data = data)
+### Model specifiction
 
-summary(fit)
+For the purpose of comparison, we select the same set of predictors and interactions as in the paper. 
+
+### Model Estimation 
+
+We fit a logistic regression with the full dataset at a significance level of 0.01. The results should be comparable to the values reported in Table 4.
+```{r}
+fit_full = glm(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, family = "binomial", data = data)
+
+summary(fit_full)
 ```
 
-### classification tree 1
-```{r}
-data_subset = data[, c("readmitted", 'discharge_disposition_id','race' , "admission_source_id" , "medical_specialty" , "time_in_hospital" , "age" , "diag_1" , "A1Cresult")]
+### Model Performance
 
-tree1 = classtree(data = data_subset, resp = "readmitted", min.obs = 100)
-tree1$var_rank
+#### Pseudo $R^2$
+
+For logistic regression, there are several measures of goodness of fit akin to $R^2$ in linear regression, including Brier score and Nagelkerke's $R^2$. Brier score is mean of the difference between the predicted probabilities and the actual outcome. Note that the Brier score is quite close to that for the null model, suggesting the model may not be very useful at explaining the variability in the data. 
+
+```{r}
+fitnull = glm(readmitted ~ 1, family = "binomial", data = data)
+prednull <- predict(fitnull, data, type = "response")
+brierScore_null <- mean((prednull - ifelse(data$readmitted == "NO", 0 , 1))^2)
+
+fit = glm(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, family = "binomial", data = data)
+pred <- predict(fit, data, type='response')
+brierScore <- mean((pred - ifelse(data$readmitted == "NO", 0 , 1))^2)
+
+print(c(brierScore, brierScore_null))
 ```
+
+Compute Nagelkerke's $R^2$ with package 'rms':
+```{r}
+fit_rms = lrm(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, data = data)
+fit_rms$stats["R2"]
+```
+
+#### Predictive performance
+
+To assess the predictive performance of the logistic model, we can resort to measures such as accuracy, classification error, sensitivity and specificity.
+
+First generate predictions using a desired cutoff point (0.15 in this case) and compare to the observed outcome:
+```{r}
+pred_outcome = as.factor(ifelse(pred<0.15, "NO", "YES"))
+confmatrix = dummy = table(data$readmitted, pred_outcome,dnn = NULL)
+confmatrix
+```
+
+The top left cell shows the number of true negatives, the top right cell shows the number of false negatives, the bottom left cell shows the number of false positives and the bottom right cell shows the number of true positives:
+```{r}
+dummy[1,1] = 'TN'
+dummy[1,2] = 'FN'
+dummy[2,1] = 'FP'
+dummy[2,2] = 'TP'
+dummy
+```
+
+Accuracy is the proportion of true positives and negatives. $Accuracy = \frac{TP + TN}{Total}$
+
+```{r}
+(61095+514) / (nrow(data))
+```
+
+Classification error is the proportion of false positives and negatives. $Classification error = \frac{FP + FN}{Total}$
+
+```{r}
+(5763+5763) / (nrow(data))
+```
+
+Sensitivity is proportion of patients with actual readmissions that are predicted to be readmitted.  $Sensitivity = \frac{TP}{TP + FN}$
+
+```{r}
+(514) / (5763+514)
+```
+
+Specificity is proportion of patients that are not actually readmitted and are predicted as such.  $Specificity = \frac{TN}{TN + FP}$
+
+```{r}
+(61095) / (61095+2601)
+```
+
+#### Discrimination
+
+There is generally a trade off between a model's sensitivity (ability to identify the true positives) and specificity (ability to identify the true negatives). The values reported above correspond to one specific cutoff for the predictions. To describe the discriminative ability of the model over different possible cutoffs, we can resort to the receiver operating characteristic (ROC) plot, where sensitivity is plotted against specificity for different cutoff values. The area under the ROC curve (AUC) is a popular indicator of how well the model performs with regards to discrimination. 
+
+```{r}
+roc <- roc(data$readmitted, pred,
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc
+```
+
+#### Calibration
+
+To examine how well the predictions match with the observed data, we consider the calibration plot of the observed frequencies versus the predicted probabilities. Ideally, the plot should be a straight line with an intercept of 0 and a slope of 1 (as shown by the red line). 
+
+```{r}
+cal = val.prob(pred, ifelse(data$readmitted == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal[c("Intercept", "Slope")]
+```
+
+### Validation
+
+Previously, we considered measures of performance using the whole dataset, and predictions of the same observations that were used to build the model. For a more realistic assessment of the model's performance, the model should be validated, and there are a couple of options: split-sample validation and K-fold cross-validation (CV). 
+
+#### Split-sample
+
+We can divide the data into two parts: the training set (80%) and the validation set (20%). This is split smaple validation. 
+```{r}
+set.seed(123)
+indices = sample(1:nrow(data), size = round(nrow(data)/5))
+data_val = data[indices, ]
+data_train = data[-indices, ]
+```
+
+
+Pseudo $R^2$ with split-sample:
+```{r}
+fitnull_split = glm(readmitted ~ 1, family = "binomial", data = data_train)
+prednull_split <- predict(fitnull_split, data_val, type = "response")
+brierScore_null <- mean((prednull_split - ifelse(data_val$readmitted == "NO", 0 , 1))^2)
+
+fit_split = glm(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, family = "binomial", data = data_train)
+pred_split <- predict(fit_split, data_val, type='response')
+brierScore <- mean((pred_split - ifelse(data_val$readmitted == "NO", 0 , 1))^2)
+
+print(c(brierScore, brierScore_null))
+```
+
+Nagelkerke's $R^2$ with split-sample:
+```{r}
+fit_rms = lrm(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, data = data_train, x = TRUE, y = TRUE)
+fit_rms$stats["R2"]
+```
+
+ROC
+```{r}
+roc_split <- roc(data_val$readmitted, pred_split,
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc_split
+```
+
+Calibration plot
+```{r}
+cal_split = val.prob(pred_split, ifelse(data_val$readmitted == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_split[c("Intercept", "Slope")]
+```
+
+#### Cross-validation
+
+Set up 10-fold cross-validation:
+```{r, echo=FALSE}
+trCntl <- trainControl(method = "CV",number = 10, classProbs = TRUE, savePredictions = TRUE)
+
+fit_CV <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, 
+                data = data_train, trControl = trCntl, method = "glm", family = "binomial")
+
+#summary(fit_CV)
+```
+
+ROC
+```{r}
+roc_CV <- roc(fit_CV$pred$obs, fit_CV$pred$YES,
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc_CV
+```
+
+```{r}
+cal_CV = val.prob(fit_CV$pred$YES, ifelse(fit_CV$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_CV[c("Intercept", "Slope")]
+```
+
+The following table summarizes the predictive performance (area under the ROC, intercept and slope of the calibration plot) without and with internal validation. When the full dataset was used, the performance tends to be overestimated. 10-fold CV was superior to the split-sample approach (equivalent to 2-fold CV).
+
+
+| Type       | AUC           | Intercept | Slope |
+|-----------:|:-------------:|:---------:|:-----:|
+|Full dataset| 0.6189        | 0         | 1     |
+|Split-sample| 0.5933        | -0.592    | 0.753 |
+|10-fold CV  | 0.6105        | -0.306    | 0.863 |
+
+
+### Decision Trees
+In addition to regression methods, the data can be explored with decision trees. 
+
+```{r}
+tree_rpart = rpart(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data_train, minsplit = 200, cp=-1)
+tree_rpart$variable.importance
+pred_tree = predict(tree_rpart, newdata = data_val)
+
+roc_tree <- roc(data_val$readmitted, pred_tree[, 2],
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc_tree
+
+cal_tree = val.prob(pred_tree[,2], ifelse(data_val$readmitted == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_tree[c("Intercept", "Slope")]
+```
+
+Bagging
+
+```{r}
+set.seed(123)
+tree_bagg <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data, 
+                 method = "bag",
+                 trControl = trCntl, bagControl = bagControl(fit = ldaBag$fit, predict = ldaBag$pred, aggregate = ldaBag$aggregate))
+
+roc_bagg <- roc(tree_bagg$pred$obs, tree_bagg$pred$YES,
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc_bagg
+
+cal_bagg = val.prob(tree_bagg$pred$YES, ifelse(tree_bagg$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_bagg[c("Intercept", "Slope")]
+```
+
+Random Forest
+```{r}
+set.seed(123)
+tree_rf <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data, 
+                 method = "rf",
+                 trControl = trCntl)
+
+roc_rf <- roc(tree_rf$pred$obs, tree_rf$pred$YES,
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc_rf
+
+cal_rf = val.prob(tree_rf$pred$YES, ifelse(tree_rf$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_rf[c("Intercept", "Slope")]
+```
+
+Boosting
+```{r}
+set.seed(123)
+tree_boost <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data, 
+                 method = "gbm",
+                 trControl = trCntl,
+                 verbose = FALSE)
+
+roc_boost <- roc(tree_boost$pred$obs, tree_boost$pred$YES,
+            # arguments for ci
+            ci=TRUE, plot = TRUE, auc = TRUE)
+roc_boost
+
+cal_boost = val.prob(tree_boost$pred$YES, ifelse(tree_boost$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_boost[c("Intercept", "Slope")]
+```
+
+
+| Type              | AUC           | Intercept | Slope |
+|------------------:|:-------------:|:---------:|:-----:|
+|Logistic regression| 0.6105        | -0.306    | 0.863 |
+|Classification Tree|  0.5693       |  -1.471   | 0.362 |
+|Bagging            | 0.606         | -0.175    | 0.923 |
+|Random Forest      |    0.5228     |  -2.064   | 0.0366|
+|Boosting           |   0.607       |    0.050  |  1.022|
+
+
+
+
+[1] Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, John N. Clore, "Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records", BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014. https://doi.org/10.1155/2014/781670

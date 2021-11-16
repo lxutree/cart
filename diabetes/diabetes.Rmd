@@ -21,7 +21,9 @@ library(caret)
 library(rms)
 library(rpart)
 library(ipred)
-library(randomForest)
+library(xgboost)
+library(mltools)
+library(data.table)
 
 source("../class.R") # load cart function
 
@@ -311,8 +313,6 @@ trCntl <- trainControl(method = "CV",number = 10, classProbs = TRUE, savePredict
 
 fit_CV <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult  +  diag_1 * discharge + race * discharge + medical_specialty*discharge + discharge*time_in_hospital + time_in_hospital*medical_specialty + age * medical_specialty + time_in_hospital*diag_1 + A1Cresult* diag_1, 
                 data = data_train, trControl = trCntl, method = "glm", family = "binomial")
-
-#summary(fit_CV)
 ```
 
 ROC
@@ -341,9 +341,10 @@ The following table summarizes the predictive performance (area under the ROC, i
 ### Decision Trees
 In addition to regression methods, the data can be explored with decision trees. 
 
+The following metrics are based on a single tree:
+
 ```{r}
 tree_rpart = rpart(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data_train, minsplit = 200, cp=-1)
-tree_rpart$variable.importance
 pred_tree = predict(tree_rpart, newdata = data_val)
 
 roc_tree <- roc(data_val$readmitted, pred_tree[, 2],
@@ -354,6 +355,13 @@ roc_tree
 cal_tree = val.prob(pred_tree[,2], ifelse(data_val$readmitted == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
 cal_tree[c("Intercept", "Slope")]
 ```
+
+
+Variable importance: discharge, time in hospital and diagnosis are the three most important variables with classification tree, although discharge was not statistically significant in the logistic regression model.
+```{r}
+tree_rpart$variable.importance
+```
+
 
 Bagging
 
@@ -374,24 +382,40 @@ cal_bagg[c("Intercept", "Slope")]
 
 Random Forest
 ```{r}
-set.seed(123)
-tree_rf <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data, 
-                 method = "rf",
-                 trControl = trCntl)
 
-roc_rf <- roc(tree_rf$pred$obs, tree_rf$pred$YES,
+# convert from data.frame to a sparse matrix
+temp <- data.table(data[ ,c("discharge","race", "source", "medical_specialty", "time_in_hospital", "age", "diag_1", "A1Cresult")])  # convert x to a data.table
+data_sparse <- sparsify(temp)
+data_dmat <- xgb.DMatrix(data = data_sparse, label = ifelse(data$readmitted == "NO", 0, 1))
+
+# set parameters for xgboost
+params = list(colsample_bynode = floor(sqrt(8))/8,
+  eta= 1,
+  max_depth = 100,
+  subsample = 1,
+  num_parallel_tree = 200,
+  objective='binary:logistic',
+  reg_lambda=0.01,
+  min_child_weight=0.01
+)
+
+# xgboost for faster random forest
+set.seed(123)
+tree_rf = xgb.cv(params = params, nfold = 10, data = data_dmat, nrounds = 1, prediction = TRUE)
+
+roc_rf <- roc(data$readmitted, tree_rf$pred,
             # arguments for ci
             ci=TRUE, plot = TRUE, auc = TRUE)
 roc_rf
 
-cal_rf = val.prob(tree_rf$pred$YES, ifelse(tree_rf$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
+cal_rf = val.prob(tree_rf$pred, ifelse(data$readmitted == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
 cal_rf[c("Intercept", "Slope")]
 ```
 
 Boosting
 ```{r}
 set.seed(123)
-tree_boost <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data, 
+tree_boost <- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data,
                  method = "gbm",
                  trControl = trCntl,
                  verbose = FALSE)
@@ -405,14 +429,14 @@ cal_boost = val.prob(tree_boost$pred$YES, ifelse(tree_boost$pred$obs == "NO", 0,
 cal_boost[c("Intercept", "Slope")]
 ```
 
+The following table compares logistic regression to different tree-based methods with 10-fold CV. Bagging and boosting but not random forest had similar performance compared to logistic regression. 
 
 | Type              | AUC           | Intercept | Slope |
 |------------------:|:-------------:|:---------:|:-----:|
-|Logistic regression| 0.6105        | -0.306    | 0.863 |
-|Classification Tree|  0.5693       |  -1.471   | 0.362 |
-|Bagging            | 0.606         | -0.175    | 0.923 |
-|Random Forest      |    0.5228     |  -2.064   | 0.0366|
-|Boosting           |   0.607       |    0.050  |  1.022|
+|Logistic regression| 0.611         | -0.306    | 0.863 |
+|Bagging            | 0.606         | -0.175    | 0.934 |
+|Random Forest      | 0.576         | -1.271    | 0.648 |
+|Boosting           | 0.607         |  0.053    | 1.023 |
 
 
 

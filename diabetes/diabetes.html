@@ -354,7 +354,7 @@ pre code {
 
 <p>This document aims to present the general steps for analyzing binary data. Data will be processed and analyzed as in Strack B. et al. [1].</p>
 <div id="data-inspection" class="section level3">
-<h3>1. Data Inspection</h3>
+<h3>Data Inspection</h3>
 <pre><code>## Loaded gbm 2.1.8</code></pre>
 <pre><code>## Type &#39;citation(&quot;pROC&quot;)&#39; for a citation.</code></pre>
 <pre><code>## 
@@ -1021,7 +1021,7 @@ roc_tree &lt;- roc(data_val$readmitted, pred_tree[, 2],
 <pre class="r"><code>cal_tree[c(&quot;Intercept&quot;, &quot;Slope&quot;)]</code></pre>
 <pre><code>##  Intercept      Slope 
 ## -1.2984419  0.4253446</code></pre>
-<p>Variable importance: discharge, time in hospital and diagnosis are the three most important variables with classification tree, although discharge was not statistically significant in the logistic regression model.</p>
+<p>Variable importance: discharge, time in hospital and diagnosis are the three most important variables with a single classification tree, although discharge was not statistically significant in the logistic regression model.</p>
 <pre class="r"><code>tree_rpart$variable.importance</code></pre>
 <pre><code>##         discharge            diag_1  time_in_hospital medical_specialty 
 ##          80.64430          57.12041          52.99112          37.24036 
@@ -1052,6 +1052,18 @@ tree_bagg &lt;- train(readmitted ~ discharge + race + source + medical_specialty
 <pre class="r"><code>cal_bagg[c(&quot;Intercept&quot;, &quot;Slope&quot;)]</code></pre>
 <pre><code>##  Intercept      Slope 
 ## -0.1441192  0.9344920</code></pre>
+<pre class="r"><code>varImp(tree_bagg)</code></pre>
+<pre><code>## ROC curve variable importance
+## 
+##                   Importance
+## discharge            100.000
+## time_in_hospital      74.523
+## age                   44.357
+## medical_specialty      5.584
+## source                 5.301
+## race                   4.463
+## A1Cresult              1.175
+## diag_1                 0.000</code></pre>
 <p>Random Forest</p>
 <pre class="r"><code># convert from data.frame to a sparse matrix
 temp &lt;- data.table(data[ ,c(&quot;discharge&quot;,&quot;race&quot;, &quot;source&quot;, &quot;medical_specialty&quot;, &quot;time_in_hospital&quot;, &quot;age&quot;, &quot;diag_1&quot;, &quot;A1Cresult&quot;)])  # convert x to a data.table
@@ -1072,16 +1084,16 @@ params = list(colsample_bynode = floor(sqrt(8))/8,
 # xgboost for faster random forest
 set.seed(123)
 tree_rf = xgb.cv(params = params, nfold = 10, data = data_dmat, nrounds = 1, prediction = TRUE)</code></pre>
-<pre><code>## [03:00:09] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:14] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:19] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:24] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:29] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:35] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:40] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:45] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:51] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
-## [03:00:57] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+<pre><code>## [15:01:31] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:01:36] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:01:41] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:01:46] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:01:51] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:01:56] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:02:01] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:02:05] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:02:11] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [15:02:16] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
 ## [1]  train-logloss:0.290362+0.000545 test-logloss:0.325869+0.004727</code></pre>
 <pre class="r"><code>roc_rf &lt;- roc(data$readmitted, tree_rf$pred,
             # arguments for ci
@@ -1102,6 +1114,21 @@ tree_rf = xgb.cv(params = params, nfold = 10, data = data_dmat, nrounds = 1, pre
 <pre class="r"><code>cal_rf[c(&quot;Intercept&quot;, &quot;Slope&quot;)]</code></pre>
 <pre><code>##  Intercept      Slope 
 ## -1.2713767  0.6479677</code></pre>
+<pre class="r"><code>test=xgboost(data = data_dmat,params = params, nrounds = 1 )</code></pre>
+<pre><code>## [15:02:21] WARNING: amalgamation/../src/learner.cc:1095: Starting in XGBoost 1.3.0, the default evaluation metric used with the objective &#39;binary:logistic&#39; was changed from &#39;error&#39; to &#39;logloss&#39;. Explicitly set eval_metric if you&#39;d like to restore the old behavior.
+## [1]  train-logloss:0.292171</code></pre>
+<pre class="r"><code>xgb.importance(model = test)[1:10,]</code></pre>
+<pre><code>##                                  Feature       Gain      Cover   Frequency
+##  1:                     time_in_hospital 0.22799755 0.14289381 0.178918103
+##  2:                       discharge_Home 0.03978497 0.04064001 0.001932977
+##  3:                       race_Caucasian 0.03818638 0.03242388 0.049771537
+##  4:                race_African American 0.03751905 0.02066423 0.047244720
+##  5:                       A1Cresult_None 0.03723921 0.03071333 0.050686289
+##  6: medical_specialty_Missing or Unknown 0.03408438 0.02947584 0.042096613
+##  7:                     source_Emergency 0.03280931 0.03358666 0.039238386
+##  8:                     A1Cresult_Normal 0.03011352 0.01915683 0.037434374
+##  9:   medical_specialty_InternalMedicine 0.03007038 0.03290327 0.032572689
+## 10:                         diag_1_Other 0.02918557 0.02377103 0.032404735</code></pre>
 <p>Boosting</p>
 <pre class="r"><code>set.seed(123)
 tree_boost &lt;- train(readmitted ~ discharge + race + source + medical_specialty + time_in_hospital + age + diag_1 + A1Cresult, data = data,
@@ -1128,7 +1155,33 @@ roc_boost &lt;- roc(tree_boost$pred$obs, tree_boost$pred$YES,
 <pre class="r"><code>cal_boost[c(&quot;Intercept&quot;, &quot;Slope&quot;)]</code></pre>
 <pre><code>##  Intercept      Slope 
 ## 0.05317641 1.02345724</code></pre>
-<p>The following table compares logistic regression to different tree-based methods with 10-fold CV. Bagging and boosting but not random forest had similar performance compared to logistic regression.</p>
+<pre class="r"><code>varImp(tree_boost)</code></pre>
+<pre><code>## gbm variable importance
+## 
+##   only 20 most important variables shown (out of 25)
+## 
+##                                      Overall
+## dischargeOther                      100.0000
+## time_in_hospital                     23.3670
+## age[60, 100)                         11.0306
+## diag_1Respiratory                     3.6349
+## medical_specialtyInternalMedicine     1.6959
+## diag_1Circulatory                     1.3240
+## diag_1Musculoskeletal                 1.3064
+## medical_specialtyOther                1.2384
+## A1CresultNormal                       0.5411
+## diag_1Digestive                       0.0000
+## medical_specialtyMissing or Unknown   0.0000
+## diag_1Neoplasms                       0.0000
+## raceMissing                           0.0000
+## diag_1Injury and poisoning            0.0000
+## raceOther                             0.0000
+## sourceReferral                        0.0000
+## A1Cresulthigh_ch                      0.0000
+## A1Cresulthigh_noch                    0.0000
+## sourceOther                           0.0000
+## diag_1Other                           0.0000</code></pre>
+<p>The following table compares logistic regression to different tree-based methods. Bagging and boosting but not random forest had similar performance compared to logistic regression.</p>
 <table>
 <thead>
 <tr class="header">
@@ -1140,25 +1193,37 @@ roc_boost &lt;- roc(tree_boost$pred$obs, tree_boost$pred$YES,
 </thead>
 <tbody>
 <tr class="odd">
-<td align="right">Logistic regression</td>
+<td align="right">CART (split)</td>
+<td align="center">0.569</td>
+<td align="center">-1.472</td>
+<td align="center">0.362</td>
+</tr>
+<tr class="even">
+<td align="right">Regression (split)</td>
+<td align="center">0.593</td>
+<td align="center">-0.592</td>
+<td align="center">0.753</td>
+</tr>
+<tr class="odd">
+<td align="right">Regression (CV)</td>
 <td align="center">0.611</td>
 <td align="center">-0.306</td>
 <td align="center">0.863</td>
 </tr>
 <tr class="even">
-<td align="right">Bagging</td>
+<td align="right">Bagging (CV)</td>
 <td align="center">0.606</td>
 <td align="center">-0.175</td>
 <td align="center">0.934</td>
 </tr>
 <tr class="odd">
-<td align="right">Random Forest</td>
+<td align="right">Random Forest (CV)</td>
 <td align="center">0.576</td>
 <td align="center">-1.271</td>
 <td align="center">0.648</td>
 </tr>
 <tr class="even">
-<td align="right">Boosting</td>
+<td align="right">Boosting (CV)</td>
 <td align="center">0.607</td>
 <td align="center">0.053</td>
 <td align="center">1.023</td>

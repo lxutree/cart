@@ -7,7 +7,7 @@ output: html_document
 
 This document aims to present the general steps for analyzing binary data. Data will be processed and analyzed as in Strack B. et al. [1].
 
-### 1. Data Inspection
+### Data Inspection
 ```{r, echo=FALSE}
 # working directory
 setwd("~/../LX_Project/cart/diabetes/")
@@ -357,7 +357,7 @@ cal_tree[c("Intercept", "Slope")]
 ```
 
 
-Variable importance: discharge, time in hospital and diagnosis are the three most important variables with classification tree, although discharge was not statistically significant in the logistic regression model.
+Variable importance: discharge, time in hospital and diagnosis are the three most important variables with a single classification tree, although discharge was not statistically significant in the logistic regression model.
 ```{r}
 tree_rpart$variable.importance
 ```
@@ -378,6 +378,8 @@ roc_bagg
 
 cal_bagg = val.prob(tree_bagg$pred$YES, ifelse(tree_bagg$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
 cal_bagg[c("Intercept", "Slope")]
+
+varImp(tree_bagg)
 ```
 
 Random Forest
@@ -410,6 +412,9 @@ roc_rf
 
 cal_rf = val.prob(tree_rf$pred, ifelse(data$readmitted == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
 cal_rf[c("Intercept", "Slope")]
+
+test=xgboost(data = data_dmat,params = params, nrounds = 1 )
+xgb.importance(model = test)[1:10,]
 ```
 
 Boosting
@@ -427,16 +432,20 @@ roc_boost
 
 cal_boost = val.prob(tree_boost$pred$YES, ifelse(tree_boost$pred$obs == "NO", 0,1), logistic.cal = FALSE, lim = c(0,0.4))
 cal_boost[c("Intercept", "Slope")]
+
+varImp(tree_boost)
 ```
 
-The following table compares logistic regression to different tree-based methods with 10-fold CV. Bagging and boosting but not random forest had similar performance compared to logistic regression. 
+The following table compares logistic regression to different tree-based methods. Bagging and boosting but not random forest had similar performance compared to logistic regression. 
 
 | Type              | AUC           | Intercept | Slope |
 |------------------:|:-------------:|:---------:|:-----:|
-|Logistic regression| 0.611         | -0.306    | 0.863 |
-|Bagging            | 0.606         | -0.175    | 0.934 |
-|Random Forest      | 0.576         | -1.271    | 0.648 |
-|Boosting           | 0.607         |  0.053    | 1.023 |
+|CART (split)       | 0.569         | -1.472    | 0.362 |
+|Regression (split) | 0.593         | -0.592    | 0.753 |
+|Regression (CV)    | 0.611         | -0.306    | 0.863 |
+|Bagging (CV)       | 0.606         | -0.175    | 0.934 |
+|Random Forest (CV) | 0.576         | -1.271    | 0.648 |
+|Boosting (CV)      | 0.607         |  0.053    | 1.023 |
 
 
 

@@ -327,6 +327,9 @@ source("class.R")
 
 Applying the function to the dataset above:
 ```{r}
+data$gender = as.factor(data$gender)
+data$change = as.factor(data$change)
+data$med = as.factor(data$med)
 classtree(data = data, resp = "readm", min.obs = 3)$output
 ```
 
@@ -351,6 +354,9 @@ Following similar steps, the function can be modified to build regression trees:
 ```{r}
 source("reg.R")
 data = read.csv("Datasets/data_cart_rerg_step.csv", row.names = 1)
+data$gender = as.factor(data$gender)
+data$change = as.factor(data$change)
+data$med = as.factor(data$med)
 regtree(data = data, resp = "time", min.obs = 3)$output
 ```
 

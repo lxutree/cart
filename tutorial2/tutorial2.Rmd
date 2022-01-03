@@ -264,7 +264,7 @@ output
 
 The following diagram illustrates the tree described in the output above:
 
-![](1split.png)
+![](split1_rhc.png)
 
 
 5. repeat 2-4 until each node is either ‘root’, ‘parent’, or ‘leaf’
@@ -372,7 +372,7 @@ output
 
 The above tree can be visualized by the following diagram:
 
-![](2split.png)
+![](split2_rhc.png)
 
 #### Summary of the steps:
 

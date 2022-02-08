@@ -9,7 +9,7 @@ output: html_document
 library(stringr)
 library(rpart)
 
-setwd("~/../LX_Project/cart/rhc/")
+setwd("~/../LX_Project/cart/tutorial2//")
 ```
 
 ### Introduction
@@ -25,7 +25,7 @@ This tutorial will explain basic tree-based methods for binary and continuous ou
 RHC was believed to lead to better patient outcomes by many physician. Hence the study aimed to examine the association of right heart catheterization (RHC) during the first 24 hours of care in the intensive care unit and subsequent survival, length of stay, intensity of care, and cost of care. Data on 5735 critically ill patients being treated in an intensive care unit were collected.  We will focus on length of stay, a continuous response, as the outcome of interest.
 
 #### Data cleaning
-Data are first cleaned following the steps outlined in "R Guide for TMLE in Medical Research" (https://ehsanx.github.io/TMLEworkshop/).
+The dataset is prepared following the steps outlined in "R Guide for TMLE in Medical Research" (https://ehsanx.github.io/TMLEworkshop/).
 
 ```{r}
 rhcdata <- read.csv("rhc.csv") # load data

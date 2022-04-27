@@ -678,22 +678,22 @@ levels(drdata$diag_1) &lt;- list(
   &quot;Other&quot; = diag_other
   )
 
-levels(drdata$race) = list(&quot;Missing&quot; = &quot;?&quot;, &quot;Other&quot; = c(&quot;Other&quot;, &quot;Asian&quot;, &quot;Hispanic&quot;), &quot;African American&quot; = &quot;AfricanAmerican&quot;, &quot;Caucasian&quot; = &quot;Caucasian&quot; )
+levels(drdata$race) = list(&quot;Missing&quot; = &quot;?&quot;, &quot;Other&quot; = c(&quot;Other&quot;, &quot;Asian&quot;, &quot;Hispanic&quot;), &quot;AfricanAmerican&quot; = &quot;AfricanAmerican&quot;, &quot;Caucasian&quot; = &quot;Caucasian&quot; )
 
 drdata$age_num = drdata$age
 levels(drdata$age_num) = list(&quot;5&quot; = &quot;[0-10)&quot;, &quot;15&quot; = &quot;[10-20)&quot;, &quot;25&quot; = &quot;[20-30)&quot;, &quot;35&quot; = &quot;[30-40)&quot;, &quot;45&quot; = &quot;[40-50)&quot;, &quot;55&quot; = &quot;[50-60)&quot;, &quot;65&quot; = &quot;[60-70)&quot;, &quot;75&quot; = &quot;[70-80)&quot;, &quot;85&quot; = &quot;[80-90)&quot;, &quot;95&quot; = &quot;[90-100)&quot;)
 
 drdata$age_num = as.numeric(as.character(drdata$age_num))
 
-levels(drdata$age) = list(&quot;&lt; 30&quot; = c(&quot;[0-10)&quot;, &quot;[10-20)&quot;, &quot;[20-30)&quot; ), &quot;[30, 60)&quot; = c(&quot;[30-40)&quot;, &quot;[40-50)&quot;, &quot;[50-60)&quot;), &quot;[60, 100) &quot; = c(&quot;[60-70)&quot;, &quot;[70-80)&quot;, &quot;[80-90)&quot;, &quot;[90-100)&quot;))
+levels(drdata$age) = list(&quot;&lt;30&quot; = c(&quot;[0-10)&quot;, &quot;[10-20)&quot;, &quot;[20-30)&quot; ), &quot;[30,60)&quot; = c(&quot;[30-40)&quot;, &quot;[40-50)&quot;, &quot;[50-60)&quot;), &quot;[60,100)&quot; = c(&quot;[60-70)&quot;, &quot;[70-80)&quot;, &quot;[80-90)&quot;, &quot;[90-100)&quot;))
 
 drdata$medical_specialty &lt;- as.factor(drdata$medical_specialty)
 drdata$medical_specialty &lt;-droplevels(drdata$medical_specialty)
 
 # change the baseline level for some factors:
-drdata$race = relevel(drdata$race, ref = &quot;African American&quot;)
+drdata$race = relevel(drdata$race, ref = &quot;AfricanAmerican&quot;)
 
-drdata$age = relevel(drdata$age, ref = &quot;[30, 60)&quot;) 
+drdata$age = relevel(drdata$age, ref = &quot;[30,60)&quot;) 
 
 drdata$diag_1 = relevel(drdata$diag_1, ref = &quot;Diabetes&quot;) 
 

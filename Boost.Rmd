@@ -23,7 +23,7 @@ source("reg.R")
 source("helperfunctions.R")
 ```
 
-# Bootsting
+# Boosting
 
 Below is example of applying the boosting algorithm to the dataset 'Boston' from package 'MASS'. The relative importance of the features is as follows:
 ```{r, echo=FALSE}

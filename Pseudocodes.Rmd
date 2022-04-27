@@ -62,13 +62,13 @@ knitr::opts_chunk$set(echo = TRUE)
 1. Let K be the number of bootstrap samples, N be the total number of observations, M be the number of features selected at random for each split. 
 2. For i in 1 to K,
 	- sample N observations randomly with replacement to generate the i^th^ bootstrap sample
-	- build a tree using the i^th^ bootstrap sample, using algorithms similar to those described above, but with a random subset of M features for each split. 
-	- For j in 1 to N:
+	- build a tree using the i^th^ bootstrap sample, using algorithms similar to those described above, but **with a random subset of M features for each split**. 
+3. For j in 1 to N:
 		- generate a prediction for the j^th^ observation using all the trees that weren't built from the j^th^ observation
 			- for binary response, determine the majority vote. If there was no majority, choose randomly
 			- for continuous response, take the average of the predictions
 		- compare the prediction to the observed value
-	- Calculate the out of bag error
+4. Calculate the out of bag error
 		- for binary response, compute the rate of misclassification
 		- for continuous response, compute the root mean squared error 
 

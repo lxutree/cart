@@ -1,10 +1,11 @@
 # This is the implementation of boosting
 
-boost = function(data, resp, depth, iter, min.obs, rate, ...){
-  # depth = maximum of terminal nodes allowed. This is equal to the number of splits + 1
-  # iter = number of iterations
+boost = function(data, resp, size, N, min.obs, rate, feat = NULL, ...){
+  # size = maximum of terminal nodes allowed. This is equal to the number of splits + 1
+  # N = number of iterations
+  # rate = shrinkage parameter
   
-  feat = names(data)[names(data)!=resp]
+  if(is.null(feat)) feat = names(data)[names(data)!=resp]
   
   # for continuous response:
   if (!is.factor(data[,resp])){

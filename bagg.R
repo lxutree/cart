@@ -49,7 +49,7 @@ bagg <- function(data, resp, n.boot = 10, min.obs, ...){
   diff_error = sort(diff_error, decreasing = TRUE)
   
 
-  # Obtaining measures of varianble importance, then sorting from most important -> least important
+  # Obtaining measures of variable importance, then sorting from most important -> least important
   var_rank_mean = apply(sapply(tree_list, function(tree){ tree$var_rank$criterion}), MARGIN = 1, FUN = mean)
   names(var_rank_mean) = feat
   rank = sort(var_rank_mean, decreasing = TRUE)

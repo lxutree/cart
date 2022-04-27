@@ -2,7 +2,7 @@
 predtree = function(newdata, resp, res, data){
   
   # splitting rules from tree:
-  rules = data.frame(t(sapply(res$split.rule[-1 ], function(x){scan(text = x, what = "" , quiet = TRUE, )}, USE.NAMES = FALSE)), res$iter[-1], stringsAsFactors = FALSE)
+  rules = data.frame(t(sapply(res$split.rule[-1 ], function(x){scan(text = x, what = "" , quiet = TRUE, )}, USE.NAMES = FALSE)), res[,4][-1], stringsAsFactors = FALSE)
   names(rules) = c("feat", "operator", "value", "iter")
   
   for(k in 1:nrow(newdata)){
@@ -30,10 +30,15 @@ predtree = function(newdata, resp, res, data){
 
 # helper function:
 compare = function(x1,value, operator){ 
-  if(operator == "=") operator = "=="
-  if(!is.na(suppressWarnings(as.numeric(value)))) value = as.numeric(value)
-  res = getFunction(operator)(x1,value); res }
-
+  if(is.factor(x1)) {
+    if (length(levels(x1)) > 2) {
+      grepl(x1, value, fixed = TRUE)
+    }
+  } else {
+    if(operator == "=") operator = "=="
+    if(!is.na(suppressWarnings(as.numeric(value)))) value = as.numeric(value)
+    res = getFunction(operator)(x1,value); res }
+  }
 na.omit.list <- function(y) { return(y[!sapply(y, function(x) all(is.na(x)))]) }
 
 

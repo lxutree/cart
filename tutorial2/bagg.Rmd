@@ -8,8 +8,12 @@ output: html_document
 ```{r}
 library(stringr)
 library(rpart)
-
+library(pROC)
+library(h2o)
+library(rpart.plot)
+library(caret)
 setwd("~/../LX_Project/cart/tutorial2//")
+source("helperfunctions.R")
 ```
 
 ### Introduction
@@ -22,9 +26,9 @@ Predictions from individual decision trees tend to have high variance. Different
 
 Bagging also provides an internal assessment of the model's predictive ability. For a bootstrap sample, some observations are left out (out-of-bag). Since the out-of-bag observations are not involved in generating the predictions for the bootstrap sample, they can be used to compute the out-of-bag error as a measure of the bagging model's predictive performance. 
 
-##### Data cleaning
+##### Bagging for continuous response with the RHC data
 
-The RHC dataset is prepared following the steps outlined in "R Guide for TMLE in Medical Research" (https://ehsanx.github.io/TMLEworkshop/).
+The Right Heart Catherization (RHC) dataset is prepared following the steps outlined in "R Guide for TMLE in Medical Research" (https://ehsanx.github.io/TMLEworkshop/).
 
 ```{r}
 rhcdata <- read.csv("rhc.csv") # load data
@@ -83,12 +87,11 @@ names(rhcdata) <- c("Disease.category", "Cancer", "Cardiovascular",
 
 levels(rhcdata$Insurance) = c("Medicaid", "Medicare", "M&M", "None", "Priv", "Priv&Medicare")
 
-rhcdata = rhcdata[1:100,] # temporary for compiling speed
 ```
 
 ##### Step by step breakdown
 
-1. Set $K$ as the number of bootstrap samples and $N$ as the total number of observations. In the case of the RHC data, $N = 5735$. Let $K = 100$.
+1. Set $K$ as the number of bootstrap samples and $N$ as the total number of observations. In the case of the RHC data, $N = 5735$. Let $K = 3$ for the demonstration purposes.
 
 ```{r}
 nrow(rhcdata)
@@ -97,26 +100,37 @@ nrow(rhcdata)
 2. For each bootstrap sample $i$ from $1$ to $K$, sample $N$ observations randomly with replacement to generate the $i$^th^ bootstrap sample. 
 
 ```{r}
+set.seed(123)
 data_list = index = list() # empty list to store bootstrap samples
-for(i in 1:100){
+for(i in 1:3){
   index[[i]] = sample(nrow(rhcdata),  replace = TRUE)
   data_list[[i]] = rhcdata[index[[i]], ]
 }
 ```
 
-3. For each bootstrap sample $i$ from $1$ to $K$, build a regression tree.
-
-We will use package 'rpart' to generate the trees. Let the minimum node side be 1000.
+3. For each bootstrap sample $i$ from $1$ to $K$, build a regression tree. We will use package ‘rpart’ to generate the trees. Let the minimum node side be 2000
 
 ```{r}
-library(rpart)
 tree_list = list() # empty list to store trees
-for(i in 1:100){
-  tree_list[[i]] = rpart(formula = Y ~ ., minsplit = 1000, data = data_list[[i]], cp=-1)
+for(i in 1:3){
+  tree_list[[i]] = rpart(formula = Y ~ ., minsplit = 2000, data = data_list[[i]], cp=-1)
 }
 ```
 
-4. For each observation in the original dataset $j$ from $1$ to $N$, generate a prediction using the set of bootstrap models that did not include it. Different bootstrap models can generate different predictions for the same observation. Such predictions can be combined to yield a single estimate. For continuous response, the estimate can be the average of the predictions. For binary response, the estimate can be the majarity vote, which corresponds to the category with the highest frequency of appearance.   
+The three trees were built using random bootstrap samples that differed from each other. The resulting trees are also slightly different as a consequence. The output for the three trees are as follows:
+```{r}
+tree_list
+```
+
+The trees can be visualized using the package 'rpart.plot':
+
+```{r}
+rpart.plot(tree_list[[1]])
+rpart.plot(tree_list[[2]])
+rpart.plot(tree_list[[3]])
+```
+
+4. For each observation in the original dataset $j$ from $1$ to $N$, generate a prediction using the set of bootstrap models that did not include it. Different bootstrap models can generate different predictions for the same observation. Such predictions can be combined to yield a single estimate. For continuous response, the estimate can be the average of the predictions. For binary response, the estimate can be the majority vote, which corresponds to the category with the highest frequency of appearance.   
 
 ```{r}
 pred = c() # vector of predictions
@@ -135,17 +149,53 @@ for(i in 1:nrow(rhcdata)){
 
 5. Compute the out-of-bag error
 
-The out-of-bag error for continuous response is given by the root of the mean squared difference between the predictions and the oberved values:
+The out-of-bag error for continuous response is given by the root of the mean squared difference between the predictions and the observed values:
 
 ```{r}
-sqrt(mean((pred - rhcdata$Y)^2))
+sqrt(mean((pred - rhcdata$Y)^2, na.rm = TRUE))
 ```
 
-The out-of-bag error for binary response is the rate of missclassification.
+Note that there are several 'NA' values in 'pred' due to the small number of bootstrap samples. 
+```{r}
+head(pred)
+```
 
-##### Comparison with existing software
+These entries correspond to entries that pertain to all three bootstrap samples, so that out-of-bag predictions could not be generated. Working with more bootstrap samples will drastically reduce such occurences. 
 
-Compare the results above against outputs from an existing R package 'ipred'. The out-of-bag error given by 'bagging' should be similar to the out-of-bad error above.
+Let's repeat the above steps with a larger boostrap sample (e.g. N=100).
+```{r}
+N=100
+
+# setting up bootstrap samples
+set.seed(123)
+data_list = index = list() # empty list to store bootstrap samples
+for(i in 1:N){
+  index[[i]] = sample(nrow(rhcdata),  replace = TRUE)
+  data_list[[i]] = rhcdata[index[[i]], ]
+}
+
+# constructing trees
+tree_list = list() # empty list to store trees
+for(i in 1:N){
+  tree_list[[i]] = rpart(formula = Y ~ ., minsplit = 2000, data = data_list[[i]], cp=-1)
+}
+
+# generating predictions
+# due to the size of 'rhcdata' (6k rows), this last part will take ~ 30 mins to run
+pred = c()
+for(i in 1:nrow(rhcdata)){
+  # the ith prediction is calculated from trees that did not use the ith observation :
+  pred_i = sapply(1:length(index), function(j){
+    # only produce a prediction from the jth model if it didn't use the ith observation
+    if((i %in% index[[j]]) == FALSE) predict(tree_list[[j]], newdata = rhcdata[i,]) else NA
+       })
+  # record the mean of predictions
+  pred[i] = mean(pred_i, na.rm = TRUE)
+}
+sqrt(mean((pred - rhcdata$Y)^2, na.rm = TRUE))
+```
+
+Compare the results above against outputs from an existing R package 'ipred'. The out-of-bag error given by 'bagging' should be similar to the out-of-bad error above. Note that at least 10 bootstrap samples are required.
 
 ```{r}
 library(ipred)
@@ -154,21 +204,583 @@ bagging(
   data = rhcdata,
   nbagg = 100,  
   coob = TRUE,
-  control = rpart.control(minsplit = 1000, cp = -1)
+  control = rpart.control(minsplit = 2000, cp = -1)
 )$err
-
 ```
 
-##### <Second example with binary response (e.g. diabetes dataset)>
+##### Bagging for binary response
+
+Bagging with a binary response follows a similar set of steps as with a continuous response. We will use the 'kyphosis' dataset from the package 'rpart' to illustrate the process.
+
+```{r}
+N=100
+
+# setting up bootstrap samples
+set.seed(123)
+data_list = index = list() # empty list to store bootstrap samples
+for(i in 1:N){
+  index[[i]] = sample(nrow(rpart::kyphosis),  replace = TRUE)
+  data_list[[i]] = rpart::kyphosis[index[[i]], ]
+}
+
+# constructing trees
+tree_list = list() # empty list to store trees
+for(i in 1:N){
+  tree_list[[i]] = rpart(formula = Kyphosis ~ ., minsplit = 30, data = data_list[[i]], cp=-1)
+}
+```
+
+The above steps are the same as with a continuous response. However, the way predictions are generated with a binary response is slightly different. Recall that with a continuous response, the predictions from various trees are averaged to produce the final prediction. For binary response, the predictions are also aggregated to produce the final prediction, but instead of taking the average, we take the 'majority vote'. That is, the category earning the highest votes across all trees will win. 
+
+```{r}
+# generating predictions
+pred = c()
+for(i in 1:nrow(kyphosis)){
+  # the ith prediction is calculated from trees that did not use the ith observation :
+  pred_i = sapply(1:length(index), function(j){
+    # only produce a prediction from the jth model if it didn't use the ith observation
+    if((i %in% index[[j]]) == FALSE) ifelse(predict(tree_list[[j]], type="class", newdata = rpart::kyphosis[i,])=="absent", 0, 1) else NA
+       })
+  # record the majority vote
+  if(length(which(pred_i==0)) == length(which(pred_i==1))){
+    # if the votes are even, pick randomly with equal probabilities:
+    pred[i] = c("absent", "present")[sample(c(1,2), size = 1, prob = c(0.5, 0.5))]
+        } else {
+          # otherwise pick the majority vote:
+          pred[i] = c("absent", "present")[which.max(c(length(which(pred_i==0)), length(which(pred_i==1))))]
+        } 
+}
+pred = as.factor(pred)
+```
+
+To estimate the accuracy of the predictions from bagging with a binary response, we can calculate the rate of missclassification:
+
+```{r}
+mean(kyphosis$Kyphosis != pred)
+```
+
+We can again compare the above results to the ouputs from 'bagging' with package 'ipred':
+
+```{r}
+library(ipred)
+bagging(
+  formula = Kyphosis ~ .,
+  data = kyphosis,
+  nbagg = 100,  
+  coob = TRUE,
+  control = rpart.control(minsplit = 30, cp = -1)
+)$err
+```
 
 #### Random Forest
 
-In bagging, bootstrap samples are generated to build trees that vary in structure for better predictive performance. Despite the randomness introduced by bootstrapping, the resulting trees and their predictions are correlated, as the same set of predictors are used to build all trees. Random forest reduces correlation of the trees by selecting a random subset of predictors for each split. This introduces additional randomness that further reduces variance in the prediction. A good starting point for the number of randomly chosen predictors at each split is $\sqrt{p}$, where $p$ is the total number of predictors. Similar to bagging, random forest combines all the trees to generate an aggregated prediction.
+In bagging, bootstrap samples are generated to build trees that vary in structure for better predictive performance. Despite the randomness introduced by bootstrapping, the resulting trees and their predictions are correlated, as the same set of predictors are used to build all trees. Random forest reduces correlation of the trees by selecting a random subset of predictors for each split within each tree. This introduces additional randomness that further reduces variance in the predictions. A good starting point for the number of randomly chosen predictors at each split is $\sqrt{p}$, where $p$ is the total number of predictors. Similar to bagging, random forest combines all the trees to generate an aggregated prediction.
+
+The following codes for regression tree show one way to implement random forest.
+
+```{r}
+regtree <- function(data, resp, min.obs, feat = NULL, nfeat = NULL){
+  # min.obs sets the minimum size for parent nodes
+  # feat is the set of predictors
+  
+  if(is.null(feat)) feat = names(data)[names(data)!=resp] # if undefined, set feat to all covariates in the data
+  leafsize = min.obs/3 # set minimum size for leaves or terminal nodes
+  
+  data.list = split_val = feat_list = list(); error = c() # empty objects
+  data.list[[1]] = data # set root of tree
+  
+  # id of observations pertaning to each node
+  node.ID = list(100)
+  
+  # data.frame to store output:
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", depth = 0, mean = mean(data[, resp]), stringsAsFactors = FALSE)
+  
+  stopsplit = FALSE; iter = 1 # initialization for while loop
+  while(!stopsplit) {
+    # list of splits to be done:
+      split.queue = which(output$status == "split")
+      
+    for (j in split.queue[1]) {
+      # load data corresponding to current node
+      data.temp = data.list[[j]]
+      
+      ### additional condition for random forest
+      if(!is.null(nfeat)) subfeat = sample(feat, nfeat, replace = FALSE) else subfeat = feat
+        # For each feature of interest, determine the optimal split
+      for (i in 1:length(subfeat)){
+          
+        data_sub = data.frame(var = data.temp[, subfeat[i]], resp = data.temp[, resp])
+        
+        # calculating sse for categorical feature:
+        if(is.factor(data_sub$var)) {
+          
+          if( length(levels(data_sub$var)) > 2 ){
+            # if more than 2 levels find all possible binary splits
+            kk = 1
+            varcomb = list()
+            for (ii in 1:(length(levels(data_sub$var))-1)) {
+              comb = combn(length(levels(data_sub$var)), ii)
+              for (jj in 1:ncol(comb)){
+                varcomb[[kk]] = levels(data_sub$var)[comb[, jj]]
+                kk = kk +1
+              }
+            }
+            
+            # calculate sse for all possible splits
+            sse = sapply(varcomb, function(varcomb_i){ 
+              sum((data_sub$resp[data_sub$var %in% varcomb_i] - mean(data_sub$resp[data_sub$var %in% varcomb_i]))^2) + sum((data_sub$resp[!(data_sub$var %in% varcomb_i)] - mean(data_sub$resp[!(data_sub$var %in% varcomb_i)]))^2) })
+            
+            # checking size of children nodes; if less than specified by 'leafsize', the split is not considered
+            count_min = sapply(varcomb, function(varcomb_i){min(length(data_sub$resp[data_sub$var %in% varcomb_i]), length(data_sub$resp[!(data_sub$var %in% varcomb_i)]))})
+            for(ii in 1:length(varcomb)) {if(count_min[ii] < round(leafsize)) sse[ii] = NA}
+            
+            # clean up:
+            if(all(is.na(sse))) {error[i] = NA; split_val[[i]] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[[i]] = varcomb[[which.min(sse)]]}
+            
+          } else {
+            # if only two levels 
+            data.split = split(data_sub, data_sub$var)
+            error[i] = sum(sapply(data.split, function(x){
+              sum( (x$resp - mean(x$resp)) ^ 2 )
+            })) 
+            
+              # checking size of children nodes; if less than specified by 'leafsize', the split is not considered
+              count_min = min(sapply(data.split, nrow))
+              if( count_min < leafsize) error[i] = NA
+          }
+          
+          # calculating sse for continuous feature:
+        } else {
+          splits_sort = sort(unique(data_sub$var)) # all possible splits
+          sse <- c() 
+          
+          # calculating sse for all possible splits
+          for( k in 1:length(splits_sort)){
+            sse[k] = sum( (data_sub$resp[data_sub$var < splits_sort[k]] - mean(data_sub$resp[data_sub$var < splits_sort[k]]) )^2 ) + sum( (data_sub$resp[data_sub$var >= splits_sort[k]] - mean(data_sub$resp[data_sub$var >= splits_sort[k]]) )^2 ) 
+            
+            # checking size of children nodes; if less than specified, the split is not considered
+            count_min = min(length(data_sub$resp[data_sub$var < splits_sort[k]]), length(data_sub$resp[data_sub$var >= splits_sort[k]]))
+            if(count_min < round(leafsize)) sse[k] = NA
+          }
+          # clean up for when none of the splits is valid:
+          if(all(is.na(sse))) {error[i] = NA; split_val[[i]] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[[i]] = splits_sort[which.min(sse)]}
+        }
+      }
+      
+      if(all(is.na(error))){
+        # if none of the splits is good, set the current node to 'leaf'
+        output$status[j] = "leaf"
+      } else {
+        # otherwise proceed with the split and choose the feature leading to the lowest sse
+        splitvar = subfeat[which.min(error)] 
+        
+        feat_list[[iter]] = subfeat # to record variables considered for each split
+        
+        # creating children nodes:
+            if( is.factor(data.temp[[splitvar]])) {
+              # for categorical feature:
+              
+              if( length(levels(data.temp[[splitvar]])) > 2 ){
+                yeslevels = split_val[[which.min(error)]]
+                nolevels = unique(data.temp[[splitvar]])[!(unique(data.temp[[splitvar]]) %in% yeslevels)]
+                children = list()
+                children[[1]] = data.temp[data.temp[[splitvar]] %in% nolevels, ]
+                children[[2]] = data.temp[data.temp[[splitvar]] %in% yeslevels, ]
+              } else children = split(data.temp, data.temp[ , splitvar])
+            } else {
+              # for continuous feature:
+              value = split_val[[which.min(error)]]
+              index = which(sort(unique(data.temp[[splitvar]])) == value)
+              # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
+              value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
+              children = list()
+              children[[1]] = data.temp[which(data.temp[[splitvar]] <= value), ]
+              children[[2]] = data.temp[which(data.temp[[splitvar]] > value), ]
+            }
+    
+     # Stopping criteria: 
+            # - less than 3 observations
+            # - all observations have the same label
+            status = sapply(children, function(x){
+              if (ncol(x) > 2) {
+                if (nrow(x) < min.obs | nrow( unique(x[, -which(names(x) %in% resp)]) ) == 1) status = "leaf" else status = "split" 
+              } else status = "leaf"
+              
+              status
+            })
+      # change current status from 'split' to 'parent' so it won't be split further:
+            output$status[j] = "parent"
+            
+      # record how the split was done:
+      if( is.factor(data.temp[[splitvar]]) ) {
+        if( length(levels(data.temp[[splitvar]])) > 2 ){
+          splitrule = c(paste(splitvar, "in", paste(nolevels, collapse = ",")), paste(splitvar, "in", paste(yeslevels, collapse = ",")) )
+        } else splitrule = sapply(names(children), function(x){paste(splitvar, "=" , x)})
+      } else {
+        splitrule = c(paste(splitvar, "<=", value),paste(splitvar, ">", value) )
+      }
+    
+      # creating outputs
+      temp.output = data.frame(status = status, count = sapply(children, nrow), "split rule" = splitrule, depth = output$depth[j] + 1, row.names = NULL, mean = sapply(children, function(x){mean(x[,resp])}))
+ 
+      # record observations in each node:
+        node.ID = c(node.ID[1:j], lapply(children, function(x){row.names(x)}), node.ID[-c(1:j)])
+        
+      # attach new outputs to existing dataframes
+      output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
+      names(children) = NULL; data.list = c(data.list[1:j], children, data.list[-c(1:j)])
+      
+      iter = iter+1
+      }
+    }
+      # check if there are remaining splits to be done:
+      if(all(output$status != "split")) stopsplit = TRUE
+      
+  }
+  return(list(output = output, feat_list = feat_list, node.ID=node.ID))
+}
+
+```
+
+Note the line that specifies 'subfeat' depending on 'nfeat': 
+```{r, eval=FALSE}
+if(!is.null(nfeat)) subfeat = sample(feat, nfeat, replace = FALSE) else subfeat = feat
+```
+, where 'subfeat' is the vector of variables subsequently used to split the current node, 'feat' is the vector of all variables in the data besides the response by default and 'nfeat' is the input that specifies the number of variables that are randomly sampled at each split. When 'nfeat' is not specified, it defaults to to 'NULL', in which case 'subfeat' contains all variables. 
+
+The following is an example of a tree in a random forest, with $\sqrt{50} \approx 7$ variables randomly selected at each split:
+```{r}
+set.seed(123)
+res = regtree(data = rhcdata, resp = "Y", min.obs = 2000, nfeat = 7)
+res$output
+```
+
+The set of variables selected at each split:
+```{r}
+res$feat_list
+```
+
+Apart from the tree generating process, the rest of the random forest algorithm is similar to bagging, including generating of bootstrap samples and calculation of out-of-bag error, as shown above.
 
 #### Boosting
 
-Unlike in bagging and random forest where trees are built independently of each other, trees are built sequentially in boosting. Boosting makes use of small trees that learn slowly to avoid overfitting. The size of the tree can be controlled by the number of terminal nodes (or the number of splits plus one), one of the tuning parameters of the algorithm. A tree is built using the residuals in the previous step rather than the outcome itself and are used to improve the previous model. The rate at which the model improves is controlled by the shrinkage parameter, which is typically very small (e.g. 0.01 or less). 
+Unlike in bagging and random forest where trees are built independently of each other, trees are built sequentially in boosting. Boosting makes use of small trees that learn slowly to avoid overfitting. The size of the tree can be controlled by the number of terminal nodes (or the number of splits plus one), one of several possible tuning parameters for boosting. Briefly, boosting starts with a set of initial predictions. Trees are then built in succesion using the residuals from the previous step (rather than the response variable) and predicted values from the trees are used to improve the model. The rate at which the model learns at each step is controlled by the shrinkage parameter, which is typically very small (e.g. 0.01 or less) such that the model improves at a slow pace. Let the shrinkage parameter be 0.1 for demonstration purposes. 
 
-Improvement in model performance decreases exponentially with the number of bootstrap samples.
+```{r}
+rate = 0.1
+```
 
-Ensemble models are more powerful but also more difficult to interpret. But can still quantify the relative importance of predictors. 
+##### Boosting for continuous response 
+
+Start with empty objects to store results and 'data_boost' which will store the predictions.
+```{r}
+pred = c()
+data_boost = rhcdata[, names(rhcdata)[names(rhcdata)!= "Y"]]
+```
+
+1. Set initial predictions. The initial predictions can be taken as the mean of the response. 
+```{r}
+pred = rep(mean(rhcdata[, "Y"]), nrow(rhcdata))
+head(pred)
+```
+
+2. Compute the residuals by substrating the predictions from the observed values
+```{r}
+data_boost$resid = rhcdata[, "Y"] - pred
+head(data_boost$resid)
+```
+
+3. Construct a tree with the residuals as the outcome
+```{r}
+tree = rpart(resid ~ ., data = data_boost, minsplit = 2000, cp = -1)
+tree
+```
+
+4. Generate predictions from the tree:
+
+```{r}
+pred_resid = predict(tree, newdata =  data_boost) 
+head(pred_resid)
+```
+
+5. Update the previous predictions for the response with the new residuals:
+
+```{r}
+pred = pred + pred_resid*rate 
+head(pred)
+```
+
+6. The above steps are repeated over a pre-specified number of iterations $N$ (e.g. 100) to complete the boosting algorithm. The predictions after the second iteration:
+
+```{r}
+  data_boost$resid = rhcdata[, "Y"] - pred
+  tree = rpart(resid~., data = data_boost, minsplit = 2000, cp = -1)
+  pred_resid = predict(tree, newdata =  data_boost) 
+  pred = pred + pred_resid*rate 
+  head(pred)
+```
+
+The predictions after the third iteration:
+```{r}
+  data_boost$resid = rhcdata[, "Y"] - pred
+  tree = rpart(resid~., data = data_boost, minsplit = 2000, cp = -1)
+  pred_resid = predict(tree, newdata =  data_boost) 
+  pred = pred + pred_resid*rate 
+  head(pred)
+```
+
+The predictions after 100 iterations:
+```{r}
+for (i in 4:100){
+  data_boost$resid = rhcdata[, "Y"] - pred
+  tree = rpart(resid~., data = data_boost, minsplit = 2000, cp = -1)
+  pred_resid = predict(tree, newdata =  data_boost) 
+  pred = pred + pred_resid*rate 
+}
+head(pred)
+```
+
+The corresponding observations in the original dataset are:
+```{r}
+head(rhcdata$Y)
+```
+
+The rmse:
+```{r}
+sqrt(mean((pred - rhcdata$Y)^2))
+```
+
+The corresponding predictions given by the package 'gbm':
+```{r}
+library(gbm)
+gbmboost <- gbm(Y ∼ ., data = rhcdata, distribution = "gaussian", n.trees = 100, n.minobsinnode = 2000/3, bag.fraction = 1, shrinkage=0.1)
+
+pred_gbm = predict(gbmboost, newdata = rhcdata)
+head(pred_gbm)
+```
+
+The rmse:
+```{r}
+sqrt(mean((pred_gbm - rhcdata$Y)^2))
+```
+
+
+##### Boosting for binary response 
+
+Boosting with a binary response follows a slightly different set of steps compared to a continuous response, since residuals are not relevant to binary data. We will use the 'Kyphosis' dataset from the package 'rpart' to demonstrate the process.
+
+Recode the response to '0' or '1', and define the response and covariates:
+
+```{r}
+kyphosis$Kyphosis = ifelse(rpart::kyphosis$Kyphosis=="absent", 0, 1)
+resp = "Kyphosis" # define response
+feat = names(kyphosis)[names(kyphosis)!=resp] # define covariates
+```
+
+We begin by calculating the log-odds from the observed outcome:
+```{r}
+table(kyphosis$Kyphosis)
+```
+
+The log-odds:
+```{r}
+logodds = as.numeric(log(table(kyphosis$Kyphosis)[2]/table(kyphosis$Kyphosis)[1]))
+logodds
+```
+
+Convert the above log-odds to a probability measure:
+```{r}
+pred = rep(1/(1+exp(-(logodds))), nrow(kyphosis), )
+```
+
+Calculate the residuals from the observed response and the initial prediction for the probability of readmission:
+```{r}
+resid = kyphosis[, resp] - pred
+```
+
+Build a regression tree for the residuals. Note that even though the response of interest (readmission) is a binary variable, regression trees are used in place of classification trees as the latter provide predictions on the probability scale. Predictions cannot be added up consecutively to produce a sensible value. Instead, we work with the linear predictor portion of the logistic model using regression trees. 
+
+```{r}
+tree = regtree(data = data.frame(kyphosis[,feat], resid = resid), min.obs = 20, resp = "resid")
+```
+
+Within each node of the tree, compute the prediction value according to the formula below, as described in Friedman's original work [1]. Briefly, the sum of residuals is divided by the sum of second derivatives of of the log-likelihood.
+
+$$ \frac{\sum_i (y_i - \hat{p}_i)}{\sum_i \hat{p}_i * (1-\hat{p}_i)} $$
+
+```{r}
+# the first entry is set to NA as it corresponds to the root of the tree
+# the original values are the means of the residuals, which are updated as described above
+tree$output$mean = c(NA, sapply(2:length(tree$node.ID), FUN = function(j){
+        tree$output[j, "mean"] * length(tree$node.ID) / sum(pred[as.numeric(tree$node.ID[[j]])]*(1 - pred[as.numeric(tree$node.ID[[j]])]))
+      }))
+```
+
+Generate the predicted values for each entry in the original dataset: 
+```{r}
+pred_resid = predtree(newdata = kyphosis, resp = resp, res = tree$output, data = kyphosis)[,resp]
+```
+
+Compute new log-odds by adding to the previous ones the predicted values multiplied by a constant 'rate', also shown as the shrinkage factor. 
+```{r}
+rate = 0.1
+logodds = logodds + pred_resid*rate 
+```
+
+Calculate the predicted probabilities using the logit link:
+```{r}
+pred = 1/(1+exp(-(logodds)))
+```
+
+generate new residuals for the next iteration
+```{r}
+resid = kyphosis[, resp] - pred
+```
+
+The AUC is:
+```{r}
+roc(kyphosis$Kyphosis, pred)
+```
+
+The AUC after another iteration:
+```{r}
+tree = regtree(data = data.frame(kyphosis[,feat], resid = resid), min.obs = 20, resp = "resid")
+tree$output$mean = c(NA, sapply(2:length(tree$node.ID), FUN = function(j){
+        tree$output[j, "mean"] * length(tree$node.ID) / sum(pred[as.numeric(tree$node.ID[[j]])]*(1 - pred[as.numeric(tree$node.ID[[j]])]))
+      }))
+pred_resid = predtree(newdata = kyphosis, resp = resp, res = tree$output, data = kyphosis)[,resp]
+logodds = logodds + pred_resid*rate 
+pred = 1/(1+exp(-(logodds)))
+resid = kyphosis[, resp] - pred
+roc(kyphosis$Kyphosis, pred)
+```
+
+The AUC after a third iteration:
+```{r}
+tree = regtree(data = data.frame(kyphosis[,feat], resid = resid), min.obs = 20, resp = "resid")
+tree$output$mean = c(NA, sapply(2:length(tree$node.ID), FUN = function(j){
+        tree$output[j, "mean"] * length(tree$node.ID) / sum(pred[as.numeric(tree$node.ID[[j]])]*(1 - pred[as.numeric(tree$node.ID[[j]])]))
+      }))
+pred_resid = predtree(newdata = kyphosis, resp = resp, res = tree$output, data = kyphosis)[,resp]
+logodds = logodds + pred_resid*rate 
+pred = 1/(1+exp(-(logodds)))
+resid = kyphosis[, resp] - pred
+roc(kyphosis$Kyphosis, pred)
+```
+
+The above steps can then be repeated for a pre-specified number of iterations (e.g. 100 in total):
+```{r}
+for (i in 4:100){
+  tree = regtree(data = data.frame(kyphosis[,feat], resid = resid), min.obs = 20, resp = "resid")
+  tree$output$mean = c(NA, sapply(2:length(tree$node.ID), FUN = function(j){
+          tree$output[j, "mean"] * length(tree$node.ID) / sum(pred[as.numeric(tree$node.ID[[j]])]*(1 - pred[as.numeric(tree$node.ID[[j]])]))
+        }))
+  pred_resid = predtree(newdata = kyphosis, resp = resp, res = tree$output, data = kyphosis)[,resp]
+  logodds = logodds + pred_resid*rate 
+  pred = 1/(1+exp(-(logodds)))
+  resid = kyphosis[, resp] - pred
+}
+roc(kyphosis$Kyphosis, pred)
+```
+
+Using a threshold of 0.2, the confusion matrix with the above predictions:
+```{r}
+confusionMatrix(data = factor(ifelse(pred>0.2, 1, 0)), reference = factor(kyphosis$Kyphosis))$table
+```
+
+Boosting for binary response is also supported by 'gbm':
+```{r}
+gbmboost2 <- gbm(Kyphosis ∼ ., data = kyphosis, distribution = "bernoulli", n.trees = 100, n.minobsinnode = 20, bag.fraction = 1, shrinkage=0.1)
+pred_gbm2 = predict(gbmboost2, newdata = kyphosis, type="response")
+```
+
+AUC with prediction from 'gbm':
+```{r}
+roc(kyphosis$Kyphosis, pred_gbm2)
+```
+
+Using a threshold of 0.2, the confusion matrix with 'gbm':
+```{r}
+confusionMatrix(data = factor(ifelse(pred_gbm2>0.2, 1, 0)), reference = factor(kyphosis$Kyphosis))$table
+```
+
+#### Recap
+
+##### Bagging
+
+Bagging consists of fitting different CART models to bootstrap samples and aggregating the predictions for better prediction accuracy. 
+
+1. Let K be the number of bootstrap samples and N be the total number of observations.
+
+2. For i in 1 to K bootstrap samples,
+
+	- sample N observations randomly with replacement to generate the i^th^ bootstrap sample
+	
+	- build a tree using the i^th^ bootstrap sample
+	
+3. For j in 1 to N observations:
+
+	- generate a prediction for the j^th^ observation using all the trees that weren't built from the j^th^ observation
+	
+	  - for binary response, determine the majority vote. If there was no majority, choose randomly
+		
+		- for continuous response, take the average of the predictions
+		
+	- compare the prediction to the observed value
+	
+4. Calculate the out of bag error
+
+	- for binary response, compute the rate of misclassification
+	
+	- for continuous response, compute the root mean squared error 
+
+##### Random forest
+
+The steps for random forest are similar to above. However, for each split, only a random subset of features is considered.
+
+1. Let K be the number of bootstrap samples and N be the total number of observations.
+
+2. For i in 1 to K bootstrap samples,
+
+	- sample N observations randomly with replacement to generate the i^th^ bootstrap sample
+	
+	- build a tree using the i^th^ bootstrap sample **with a random subset of M features at each split**.
+	
+3. For j in 1 to N observations:
+
+	- generate a prediction for the j^th^ observation using all the trees that weren't built from the j^th^ observation
+	
+	  - for binary response, determine the majority vote. If there was no majority, choose randomly
+		
+		- for continuous response, take the average of the predictions
+		
+	- compare the prediction to the observed value
+	
+4. Calculate the out of bag error
+
+	- for binary response, compute the rate of misclassification
+	
+	- for continuous response, compute the root mean squared error 
+
+
+##### Boosting
+
+Boosting is an iterative algorithm where trees are built sequentially.
+
+1. Let K be the number of iterations, D be the depth of trees, and λ be the shrinking factor
+
+2. Let the initial predictions be the mean response for all entries
+
+3. Compute residuals by substracting the predictions from the observations
+
+4. For i in 2 to K:
+
+	- Build a tree using the residuals in the previous iteration with D splits in total (i.e. D + 1 terminal nodes)
+	
+	- Generate predicted values from the tree 
+	
+	- Update the predictions by adding the predicted values scaled by λ to the previous predictions
+	
+	- Update the residuals using the new predictions
+
+[1] Jerome H. Friedman "Greedy function approximation: A gradient boosting machine.," The Annals of Statistics, Ann. Statist. 29(5), 1189-1232, (October 2001)

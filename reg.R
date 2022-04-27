@@ -1,11 +1,11 @@
-regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, depth = NULL){
+regtree <- function(data, resp, min.obs, leafsize = NULL, feat = NULL, nfeat =NULL, type = NULL, depth = NULL){
   # nfeat = number of features selected at random at each split
   # feat = list of features 
   # depth = maximum of terminal nodes allowed. This is equal to the number of splits + 1
   
   
   # minimum size of leaves?
-  leafsize = min.obs/3 # same as the default in rpart
+  if(is.null(leafsize)) leafsize = min.obs/3 # same as the default in rpart
   
   # data.frame to store results:
   output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, mean = mean(data[, resp]), stringsAsFactors = FALSE)
@@ -28,6 +28,9 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
   
   iter = 1
   
+  # id of observations pertaning to each node
+  node.ID = list(100)
+  
   # list of features:
   if(is.null(feat)) feat = allfeat = names(data)[names(data)!=resp]
   if(is.null(nfeat)) nfeat = round(sqrt(length(feat)))
@@ -38,7 +41,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
   
   # iterative process:
   while(!stopsplit) {
-    
+  
     # list of splits to be done:
     split.queue = which(output$status == "split")
     
@@ -116,14 +119,14 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
       }
       
       if(all(is.na(error))){
-        # if none of the splits is good, consider the current node to 'leaf'
+        # if none of the splits is good, set the current node to 'leaf'
         output$status[j] = "leaf"
       } else {
         # characteristics of the current split
         splitvar = feat[which.min(error)] # feature leading to the lowest sse
         rss_diff = rss_parent - min(error, na.rm = TRUE) # difference in sse
         feat_vec = c(feat_vec, splitvar) # record feature used to split
-        diff_vec = c(diff_vec, rss_diff) # record different in sse
+        diff_vec = c(diff_vec, rss_diff) # record difference in sse
         
         # creating children nodes:
         if( is.factor(data.temp[[splitvar]])) {
@@ -131,7 +134,7 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
           
           if( length(levels(data.temp[[splitvar]])) > 2 ){
             yeslevels = split_val[[which.min(error)]]
-            nolevels = levels(data.temp[[splitvar]])[!(levels(data.temp[[splitvar]]) %in% yeslevels)]
+            nolevels = unique(data.temp[[splitvar]])[!(unique(data.temp[[splitvar]]) %in% yeslevels)]
             data.next = list()
             data.next[[1]] = data.temp[data.temp[[splitvar]] %in% nolevels, ]
             data.next[[2]] = data.temp[data.temp[[splitvar]] %in% yeslevels, ]
@@ -174,12 +177,14 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
         # creating outputs
         temp.output = data.frame(status = status, count = sapply(data.next, nrow), "split rule" = splitrule, iter = output$iter[j] + 1, row.names = NULL, mean = sapply(data.next, function(x){mean(x[[resp]])}))
         
+        # record observations in each node:
+        node.ID = c(node.ID[1:j], lapply(data.next, function(x){row.names(x)}), node.ID[-c(1:j)])
+        
         # attach new outputs to existing dataframe
         output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
         names(data.next) = NULL; data.list = c(data.list[1:j], data.next, data.list[-c(1:j)])
-        
-        # check if there are remaining splits to be done:
-        if(all(output$status != "split")) stopsplit = TRUE
+    
+
       }
     }
     
@@ -189,8 +194,11 @@ regtree <- function(data, resp, min.obs, feat = NULL, nfeat =NULL, type = NULL, 
     for (i in 1:length(allfeat)){
       rss_sum[i] = sum(diff_vec[which(feat_vec == allfeat[i])])
     }
-  
+    
+    # check if there are remaining splits to be done:
+    if(all(output$status != "split")) stopsplit = TRUE
+    
   
 }
-  return(list(output = output, var_rank = data.frame(criterion = rss_sum, row.names = allfeat)))
+  return(list(output = output, var_rank = data.frame(criterion = rss_sum, row.names = allfeat), node.ID = node.ID))
 }

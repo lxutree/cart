@@ -483,22 +483,22 @@ levels(drdata$diag_1) <- list(
   "Other" = diag_other
   )
 
-levels(drdata$race) = list("Missing" = "?", "Other" = c("Other", "Asian", "Hispanic"), "African American" = "AfricanAmerican", "Caucasian" = "Caucasian" )
+levels(drdata$race) = list("Missing" = "?", "Other" = c("Other", "Asian", "Hispanic"), "AfricanAmerican" = "AfricanAmerican", "Caucasian" = "Caucasian" )
 
 drdata$age_num = drdata$age
 levels(drdata$age_num) = list("5" = "[0-10)", "15" = "[10-20)", "25" = "[20-30)", "35" = "[30-40)", "45" = "[40-50)", "55" = "[50-60)", "65" = "[60-70)", "75" = "[70-80)", "85" = "[80-90)", "95" = "[90-100)")
 
 drdata$age_num = as.numeric(as.character(drdata$age_num))
 
-levels(drdata$age) = list("< 30" = c("[0-10)", "[10-20)", "[20-30)" ), "[30, 60)" = c("[30-40)", "[40-50)", "[50-60)"), "[60, 100) " = c("[60-70)", "[70-80)", "[80-90)", "[90-100)"))
+levels(drdata$age) = list("<30" = c("[0-10)", "[10-20)", "[20-30)" ), "[30,60)" = c("[30-40)", "[40-50)", "[50-60)"), "[60,100)" = c("[60-70)", "[70-80)", "[80-90)", "[90-100)"))
 
 drdata$medical_specialty <- as.factor(drdata$medical_specialty)
 drdata$medical_specialty <-droplevels(drdata$medical_specialty)
 
 # change the baseline level for some factors:
-drdata$race = relevel(drdata$race, ref = "African American")
+drdata$race = relevel(drdata$race, ref = "AfricanAmerican")
 
-drdata$age = relevel(drdata$age, ref = "[30, 60)") 
+drdata$age = relevel(drdata$age, ref = "[30,60)") 
 
 drdata$diag_1 = relevel(drdata$diag_1, ref = "Diabetes") 
 

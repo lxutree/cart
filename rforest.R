@@ -1,4 +1,4 @@
-# This is the function for random forrest
+# This is the function for random forest
 # The bulk is identical to the function 'bagg' for bagging. 
 #  - The fundamental difference is that with random forest, a random subset of features are selected to split each node in a tree. 
 #  - The random selection of features is done through the argument "type = 'rf'", which tells the function to randomly select a subset of features at each split

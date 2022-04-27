@@ -1,0 +1,644 @@
+---
+title: "Variable Importance"
+author: "Liang"
+date: "14/03/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(caret)
+library(rpart)
+library(gbm)
+setwd("~/../LX_Project/cart/")
+```
+
+### Introduction
+
+In regression models, the relative importance of predictors can be determine in various ways, e.g., by comparing p-values and confidence intervals. With classification and regression trees (CARTs), determining variable importance is less straight forward. In this document, we will explore ways to calculate variable importance for simple CARTs as well as more complex variations such as bagging, random forest and boosting. The right heart catheterization (RHC) data will be used to demonstrate the process of calculating variable importance for tree-based methods. 
+
+##### Data cleaning
+The dataset is prepared following the steps outlined in "R Guide for TMLE in Medical Research" (https://ehsanx.github.io/TMLEworkshop/).
+
+```{r}
+rhcdata <- read.csv("tutorial2/rhc.csv") # load data
+
+# add column for outcome Y: length of stay 
+# Y = date of discharge - study admission date
+# Y = date of death - study admission date if date of discharge not available
+rhcdata$Y <- rhcdata$dschdte - rhcdata$sadmdte
+rhcdata$Y[is.na(rhcdata$Y)] <- rhcdata$dthdte[is.na(rhcdata$Y)] - 
+  rhcdata$sadmdte[is.na(rhcdata$Y)]
+# remove outcomes we are not examining in this example
+rhcdata <- dplyr::select(rhcdata, 
+                         !c(dthdte, lstctdte, dschdte, death, t3d30, dth30, surv2md1))
+# remove unnecessary and problematic variables 
+rhcdata <- dplyr::select(rhcdata, 
+                         !c(sadmdte, ptid, X, adld3p, urin1, cat2))
+
+# convert all categorical variables to factors 
+factors <- c("cat1", "ca", "cardiohx", "chfhx", "dementhx", "psychhx", 
+             "chrpulhx", "renalhx", "liverhx", "gibledhx", "malighx", 
+             "immunhx", "transhx", "amihx", "sex", "dnr1", "ninsclas", 
+             "resp", "card", "neuro", "gastr", "renal", "meta", "hema", 
+             "seps", "trauma", "ortho", "race", "income")
+rhcdata[factors] <- lapply(rhcdata[factors], as.factor)
+# convert our treatment A (RHC vs. No RHC) to a binary variable
+rhcdata$A <- ifelse(rhcdata$swang1 == "RHC", 1, 0)
+rhcdata <- dplyr::select(rhcdata, !swang1)
+# Categorize the variables to match with the original paper
+rhcdata$age <- cut(rhcdata$age,breaks=c(-Inf, 50, 60, 70, 80, Inf),right=FALSE)
+rhcdata$race <- factor(rhcdata$race, levels=c("white","black","other"))
+rhcdata$sex <- as.factor(rhcdata$sex)
+rhcdata$sex <- relevel(rhcdata$sex, ref = "Male")
+rhcdata$cat1 <- as.factor(rhcdata$cat1)
+levels(rhcdata$cat1) <- c("ARF","CHF","Other","Other","Other",
+                          "Other","Other","MOSF","MOSF")
+rhcdata$ca <- as.factor(rhcdata$ca)
+levels(rhcdata$ca) <- c("Metastatic","None","Localized (Yes)")
+rhcdata$ca <- factor(rhcdata$ca, levels=c("None",
+                                          "Localized (Yes)","Metastatic"))
+
+# Rename variables
+names(rhcdata) <- c("Disease.category", "Cancer", "Cardiovascular", 
+                    "Congestive.HF", "Dementia", "Psychiatric", "Pulmonary", 
+                    "Renal", "Hepatic", "GI.Bleed", "Tumor", 
+                    "Immunosupperssion", "Transfer.hx", "MI", "age", "sex", 
+                    "edu", "DASIndex", "APACHE.score", "Glasgow.Coma.Score", 
+                    "blood.pressure", "WBC", "Heart.rate", "Respiratory.rate", 
+                    "Temperature", "PaO2vs.FIO2", "Albumin", "Hematocrit", 
+                    "Bilirubin", "Creatinine", "Sodium", "Potassium", "PaCo2", 
+                    "PH", "Weight", "DNR.status", "Insurance", 
+                    "Respiratory.Diag", "Cardiovascular.Diag", 
+                    "Neurological.Diag", "Gastrointestinal.Diag", "Renal.Diag",
+                    "Metabolic.Diag", "Hematologic.Diag", "Sepsis.Diag", 
+                    "Trauma.Diag", "Orthopedic.Diag", "race", "income", 
+                    "Y", "A")
+
+levels(rhcdata$Insurance) = c("Medicaid", "Medicare", "M&M", "None", "Priv", "Priv&Medicare")
+
+rhcdata = rhcdata[1:500,]
+```
+
+#### CARTs
+
+With CARTs, one way to gauge variable importance is to compare the extent to which variables reduce variation in the response, also referred to as 'node impurity'. Since one variable can be chosen more than once as the split variable, the reductions in variation are aggregated over all splits. 
+
+Start with constructing a regression tree for the RHC dataset.
+```{r}
+# "Y" is the response variable
+resp = "Y"; data = rhcdata
+
+# create data.drame to store outputs
+output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, mean = mean(data[, resp]), stringsAsFactors = FALSE)
+```
+
+For simplicity, we consider three variables, 'Albumin', 'Cardiovascular' and 'Disease.category' for the model. 
+
+```{r}
+# create vector of variables to be used for building the tree
+feat = c("Albumin", "Cardiovascular", "Disease.category")
+```
+
+```{r}
+# set minimum observation per parent node. The value is large in order to guarantee a simple model with few splits.
+min.obs = 200
+
+# set minimum node size. The same value is used as the default setting in rpart
+leafsize = min.obs/3 
+
+# empty objects for later use 
+weighted.sd = c()
+error = c()
+split_val = list()
+
+# For each feature of interest, determine the optimal split
+for (i in 1:length(feat)){
+  data_sub = data.frame(var = data[, feat[i]], resp = data[, resp])
+
+  # calculating sse for categorical feature:
+  if(is.factor(data_sub$var)) {
+    
+    if( length(levels(data_sub$var)) > 2 ){
+      # if more than 2 levels find all possible binary splits
+      kk = 1
+      varcomb = list()
+      for (ii in 1:(length(levels(data_sub$var))-1)) {
+        comb = combn(length(levels(data_sub$var)), ii)
+        for (jj in 1:ncol(comb)){
+          varcomb[[kk]] = levels(data_sub$var)[comb[, jj]]
+          kk = kk +1
+        }
+      }
+      
+      # calculate sse for all possible splits
+      sse = sapply(varcomb, function(varcomb_i){ 
+        sum((data_sub$resp[data_sub$var %in% varcomb_i] - mean(data_sub$resp[data_sub$var %in% varcomb_i]))^2) + sum((data_sub$resp[!(data_sub$var %in% varcomb_i)] - mean(data_sub$resp[!(data_sub$var %in% varcomb_i)]))^2) })
+      
+      # checking size of children nodes; if less than specified by 'leafsize', the split is not considered
+      count_min = sapply(varcomb, function(varcomb_i){min(length(data_sub$resp[data_sub$var %in% varcomb_i]), length(data_sub$resp[!(data_sub$var %in% varcomb_i)]))})
+      for(ii in 1:length(varcomb)) {if(count_min[ii] < round(leafsize)) sse[ii] = NA}
+      
+      # clean up:
+      if(all(is.na(sse))) {error[i] = NA; split_val[[i]] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[[i]] = varcomb[[which.min(sse)]]}
+      
+    } else {
+      # if only two levels 
+      data.split = split(data_sub, data_sub$var)
+      error[i] = sum(sapply(data.split, function(x){
+        sum( (x$resp - mean(x$resp)) ^ 2 )
+      })) 
+      
+        # checking size of children nodes; if less than specified by 'leafsize', the split is not considered
+        count_min = min(sapply(data.split, nrow))
+        if( count_min < leafsize) error[i] = NA
+    }
+    
+    # calculating sse for continuous feature:
+  } else {
+    splits_sort = sort(unique(data_sub$var)) # all possible splits
+    sse <- c() 
+    
+    # calculating sse for all possible splits
+    for( k in 1:length(splits_sort)){
+      sse[k] = sum( (data_sub$resp[data_sub$var < splits_sort[k]] - mean(data_sub$resp[data_sub$var < splits_sort[k]]) )^2 ) + sum( (data_sub$resp[data_sub$var >= splits_sort[k]] - mean(data_sub$resp[data_sub$var >= splits_sort[k]]) )^2 ) 
+      
+      # checking size of children nodes; if less than specified, the split is not considered
+      count_min = min(length(data_sub$resp[data_sub$var < splits_sort[k]]), length(data_sub$resp[data_sub$var >= splits_sort[k]]))
+      if(count_min < round(leafsize)) sse[k] = NA
+    }
+    # clean up for when none of the splits is valid:
+    if(all(is.na(sse))) {error[i] = NA; split_val[[i]] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[[i]] = splits_sort[which.min(sse)]}
+  }
+}
+
+
+if(all(is.na(error))){
+  # if none of the splits is good, set the current node to 'leaf'
+  output$status[j] = "leaf"
+} else {
+  # otherwise proceed with the split and choose the feature leading to the lowest sse
+  splitvar = feat[which.min(error)] 
+}
+splitvar
+```
+
+Note that the sum of squared errors (SSE) for the parent node is:
+```{r}
+rss_parent = sum((data[,resp] - mean(data[,resp]))^2)
+rss_parent
+```
+
+The SSE after the split is:
+```{r}
+min(error, na.rm = TRUE)
+```
+
+The variable 'Disease.category' reduced the SSE of the parent node by:
+```{r}
+diff = rss_parent - min(error, na.rm = TRUE)
+diff
+```
+
+Repeat the above steps but this time with a loop to complete the tree.
+
+```{r}
+regtree <- function(data, resp, min.obs, feat){
+  stopsplit = FALSE
+  data.list = list()
+  data.list[[1]] = rhcdata
+  varimp = data.frame()
+  iter = 1
+  leafsize = min.obs/3
+  output = data.frame(status = "split", count = nrow(data), "split rule" = "root", iter = 0, mean = mean(data[, resp]), stringsAsFactors = FALSE)
+  while(!stopsplit) {
+    # list of splits to be done:
+      split.queue = which(output$status == "split")
+      
+      for (j in split.queue[1]) {
+        # load data corresponding to current node
+        data.temp = data.list[[j]]
+          
+      # For each feature of interest, determine the optimal split
+      for (i in 1:length(feat)){
+        data_sub = data.frame(var = data.temp[, feat[i]], resp = data.temp[, resp])
+        
+        # calculating sse for categorical feature:
+        if(is.factor(data_sub$var)) {
+          
+          if( length(levels(data_sub$var)) > 2 ){
+            # if more than 2 levels find all possible binary splits
+            kk = 1
+            varcomb = list()
+            for (ii in 1:(length(levels(data_sub$var))-1)) {
+              comb = combn(length(levels(data_sub$var)), ii)
+              for (jj in 1:ncol(comb)){
+                varcomb[[kk]] = levels(data_sub$var)[comb[, jj]]
+                kk = kk +1
+              }
+            }
+            
+            # calculate sse for all possible splits
+            sse = sapply(varcomb, function(varcomb_i){ 
+              sum((data_sub$resp[data_sub$var %in% varcomb_i] - mean(data_sub$resp[data_sub$var %in% varcomb_i]))^2) + sum((data_sub$resp[!(data_sub$var %in% varcomb_i)] - mean(data_sub$resp[!(data_sub$var %in% varcomb_i)]))^2) })
+            
+            # checking size of children nodes; if less than specified by 'leafsize', the split is not considered
+            count_min = sapply(varcomb, function(varcomb_i){min(length(data_sub$resp[data_sub$var %in% varcomb_i]), length(data_sub$resp[!(data_sub$var %in% varcomb_i)]))})
+            for(ii in 1:length(varcomb)) {if(count_min[ii] < round(leafsize)) sse[ii] = NA}
+            
+            # clean up:
+            if(all(is.na(sse))) {error[i] = NA; split_val[[i]] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[[i]] = varcomb[[which.min(sse)]]}
+            
+          } else {
+            # if only two levels 
+            data.split = split(data_sub, data_sub$var)
+            error[i] = sum(sapply(data.split, function(x){
+              sum( (x$resp - mean(x$resp)) ^ 2 )
+            })) 
+            
+              # checking size of children nodes; if less than specified by 'leafsize', the split is not considered
+              count_min = min(sapply(data.split, nrow))
+              if( count_min < leafsize) error[i] = NA
+          }
+          
+          # calculating sse for continuous feature:
+        } else {
+          splits_sort = sort(unique(data_sub$var)) # all possible splits
+          sse <- c() 
+          
+          # calculating sse for all possible splits
+          for( k in 1:length(splits_sort)){
+            sse[k] = sum( (data_sub$resp[data_sub$var < splits_sort[k]] - mean(data_sub$resp[data_sub$var < splits_sort[k]]) )^2 ) + sum( (data_sub$resp[data_sub$var >= splits_sort[k]] - mean(data_sub$resp[data_sub$var >= splits_sort[k]]) )^2 ) 
+            
+            # checking size of children nodes; if less than specified, the split is not considered
+            count_min = min(length(data_sub$resp[data_sub$var < splits_sort[k]]), length(data_sub$resp[data_sub$var >= splits_sort[k]]))
+            if(count_min < round(leafsize)) sse[k] = NA
+          }
+          # clean up for when none of the splits is valid:
+          if(all(is.na(sse))) {error[i] = NA; split_val[[i]] = NA} else { error[i] = min(sse, na.rm = TRUE); split_val[[i]] = splits_sort[which.min(sse)]}
+        }
+      }
+      
+      
+      if(all(is.na(error))){
+        # if none of the splits is good, set the current node to 'leaf'
+        output$status[j] = "leaf"
+      } else {
+        # otherwise proceed with the split and choose the feature leading to the lowest sse
+        splitvar = feat[which.min(error)] 
+        
+        # creating children nodes:
+            if( is.factor(data.temp[[splitvar]])) {
+              # for categorical feature:
+              
+              if( length(levels(data.temp[[splitvar]])) > 2 ){
+                yeslevels = split_val[[which.min(error)]]
+                nolevels = unique(data.temp[[splitvar]])[!(unique(data.temp[[splitvar]]) %in% yeslevels)]
+                children = list()
+                children[[1]] = data.temp[data.temp[[splitvar]] %in% nolevels, ]
+                children[[2]] = data.temp[data.temp[[splitvar]] %in% yeslevels, ]
+              } else children = split(data.temp, data.temp[ , splitvar])
+            } else {
+              # for continuous feature:
+              value = split_val[[which.min(error)]]
+              index = which(sort(unique(data.temp[[splitvar]])) == value)
+              # taking the middle point of unique values as the splitting point to be consistent with 'rpart':
+              value = (sort(unique(data.temp[[splitvar]]))[index] + sort(unique(data.temp[[splitvar]]))[index-1])/2
+              children = list()
+              children[[1]] = data.temp[which(data.temp[[splitvar]] <= value), ]
+              children[[2]] = data.temp[which(data.temp[[splitvar]] > value), ]
+            }
+    
+     # Stopping criteria: 
+            # - less than 3 observations
+            # - all observations have the same label
+            status = sapply(children, function(x){
+              if (ncol(x) > 2) {
+                if (nrow(x) < min.obs | nrow( unique(x[, -which(names(x) %in% resp)]) ) == 1) status = "leaf" else status = "split" 
+              } else status = "leaf"
+              
+              status
+            })
+      # change current status from 'split' to 'parent' so it won't be split further:
+            output$status[j] = "parent"
+            
+      # record how the split was done:
+      if( is.factor(data.temp[[splitvar]]) ) {
+        if( length(levels(data.temp[[splitvar]])) > 2 ){
+          splitrule = c(paste(splitvar, "in", paste(nolevels, collapse = ",")), paste(splitvar, "in", paste(yeslevels, collapse = ",")) )
+        } else splitrule = sapply(names(children), function(x){paste(splitvar, "=" , x)})
+      } else {
+        splitrule = c(paste(splitvar, "<=", value),paste(splitvar, ">", value) )
+      }
+    
+      # creating outputs
+      temp.output = data.frame(status = status, count = sapply(children, nrow), "split rule" = splitrule, iter = output$iter[j] + 1, row.names = NULL, mean = sapply(children, function(x){mean(x[,resp])}))
+      
+      # reduction in sse for variable importance
+      sse_parent = sum((data.temp[,resp] - mean(data.temp[,resp]))^2)
+      diff = sse_parent - min(error, na.rm = TRUE)
+      temp.varimp =  data.frame(variable = splitvar, diff_sse = diff)
+          
+      # attach new outputs to existing dataframes
+      output = rbind(output[1:j,], temp.output, output[-c(1:j), ])
+      names(children) = NULL; data.list = c(data.list[1:j], children, data.list[-c(1:j)])
+      
+      varimp = rbind(varimp, temp.varimp)
+      }
+    }
+      # check if there are remaining splits to be done:
+      if(all(output$status != "split")) stopsplit = TRUE
+  }
+  return(list(output = output, varimp = varimp))
+}
+res = regtree(data = rhcdata, resp = "Y", min.obs = 200, feat = c("Disease.category", "Albumin", "Cardiovascular"))
+```
+
+The tree was split eight times, with either 'Disease.category' or 'Albumin':
+```{r}
+res$output
+```
+
+The reductions in SSE over each split are as follows:
+```{r}
+res$varimp
+```
+
+For each variable, sum up the reductions in SSE over all splits it was involved in. 
+```{r}
+varimp_sum = c()
+for (i in 1:length(feat)){
+  varimp_sum[i] = sum(res$varimp$diff_sse[which(res$varimp$variable == feat[i])])
+}
+```
+
+The relative variable importance is as follows:
+```{r}
+data.frame(variable = feat, varimp = varimp_sum)
+```
+
+'Cardiovascular' was the least importance variable, as expected, as it wasn't involved in any of the splits. 'Disease.category' appeared more important than 'Albumin' although it was only involved in three of eight splits. The above results can be compared to the output of existing software package 'rpart':
+
+```{r}
+res_rpart = rpart(Y~Disease.category+Albumin+Cardiovascular, data = rhcdata, minsplit = 200, cp=-1)
+res_rpart
+res_rpart$variable.importance
+```
+
+
+#### Bagging
+
+Variable importance can be obtained for other tree-based methods, including bagging, random forest Bagging and random forest involve building a number of different trees, where it is possible to obtain estimates of prediction accuracy with internal validation. In addition to the approach shown above for assessing variable importance through tracking reductions in 'node impurity' or heterogeneity in the data, one can also obtain measures of variable importance via prediction accuracy. Permuting the values of an important predictor should compromise the prediction accuracy of the model. To demonstrate this, we will apply bootstrap aggregation (bagging) to the RHC dataset.
+
+Let 'n.boot' be the number of bootstrap samples. 
+```{r}
+n.boot = 100
+```
+
+The following are functions to generate predictions from the custom outputs. 
+```{r}
+predtree = function(newdata, resp, res, data){
+  
+  # splitting rules from tree:
+  rules = data.frame(t(sapply(res$split.rule[-1 ], function(x){scan(text = x, what = "" , quiet = TRUE, )}, USE.NAMES = FALSE)), res$iter[-1], stringsAsFactors = FALSE)
+  names(rules) = c("feat", "operator", "value", "iter")
+  
+  for(k in 1:nrow(newdata)){
+    
+    ii=1
+    stoploop = FALSE
+    while(!stoploop){
+      if(compare(newdata[k, rules[ii, "feat"]], rules[ii, "value"],  (rules[ii, "operator"]))) {
+        if(rules$iter[ii+1] == rules$iter[ii]) stoploop = TRUE else ii = ii + 1
+      } else {
+        ii = which(rules$feat == rules$feat[ii] & rules$iter == rules$iter[ii])[which(rules$feat == rules$feat[ii] & rules$iter == rules$iter[ii]) > ii][1]
+      }
+
+      if(rules$iter[ii+1] < rules$iter[ii] | ii == nrow(rules)) stoploop = TRUE
+    }
+    
+    if(class(data[, resp]) == "factor"){
+      newdata[,resp][k] = if(res$prob[ii+1] > 0.5) levels(data[, resp])[1] else { if(res$prob[ii+1] == 0.5) levels(data[, resp])[sample(x = 2, size = 1, prob = c(0.5, 0.5))] else levels(data[, resp])[2]}
+    } else {
+      newdata[,resp][k] = res$mean[ii+1]
+    }
+  }
+  return(newdata)
+}
+
+# helper function:
+compare = function(x1,value, operator){ 
+  if(is.factor(x1)) {
+    if (length(levels(x1)) > 2) {
+      grepl(x1, value, fixed = TRUE)
+    }
+  } else {
+    if(operator == "=") operator = "=="
+    if(!is.na(suppressWarnings(as.numeric(value)))) value = as.numeric(value)
+    res = getFunction(operator)(x1,value); res }
+  }
+```
+
+The following function computes the out-of-bag error using the given new dataset and the list of trees. 
+```{r}
+na.omit.list <- function(y) { return(y[!sapply(y, function(x) all(is.na(x)))]) }
+
+ooberror = function(newdata, index_list, tree_list, data){
+  
+  # compute predictions for each obs in the dataset
+  for (obs in 1:nrow(data)){
+    # for obs i, gather list of trees that weren't built from this obs 
+    # only those trees will be used to predict
+    ifoob = sapply(index_list, function(index){
+      !(obs %in% index)
+    })
+    
+    if(class(data[, resp]) == "factor"){
+      # for classification:
+      pred_obs = lapply(1:length(tree_list), function(k){
+        # generate prediction from tree k if it didn't contain current obs
+        if(ifoob[k] == TRUE) data.frame(resp = predtree(newdata = newdata[obs, ], resp = resp, res = tree_list[[k]]$output, data = data)[,resp]) else NA
+      })
+      pred_obs = na.omit.list(pred_obs)
+      pred_obs = do.call(rbind, pred_obs)
+      
+      # if no prediction was generated from any tree, set to NA
+      if(is.null(pred_obs)) pred[obs] = NA else{
+        # other wise, find the majority vote
+        pred[obs] = if(table(pred_obs)[1] != table(pred_obs)[2]){
+          levels(pred_obs$resp)[which.max(table(pred_obs))]
+        } else {
+          # If there's no majority, pick randomly with equal probabilities
+          levels(pred_obs$resp)[sample(x = 2, size = 1, prob = c(0.5, 0.5))]
+        } 
+      }
+    } else {
+      # for regression:
+      # generate prediction from tree k if it didn't contain current obs
+      pred_obs = sapply(1:length(tree_list), function(k){
+        if(ifoob[k] == TRUE) predtree(newdata = newdata[obs, ], resp = resp, res = tree_list[[k]]$output, data = data)[,resp] else NA
+      })
+      
+      # if no prediction was generated from any tree, set to NA. Otherwise, compute the average of predictions
+      if (all(is.na(pred_obs))) pred[obs] = NA else pred[obs]  = mean(pred_obs, na.rm = TRUE)
+      
+    }
+    
+  }
+  if(class(data[, resp]) == "factor"){
+    # dataframe containing predicted and observed values:
+    comb = data.frame(pred, observed = data[,resp])
+    comb = na.omit(comb)
+    
+    # find the rate of missclassification for classification trees:
+    error = mean(comb$pred != comb$observed)
+  } else {
+    # compute rmse for regression trees:
+    error = sqrt(mean( (pred - data[,resp])^2, na.rm = TRUE))
+  }
+  
+  return(error)
+}
+environment(ooberror) <- environment()
+```
+
+The bagging algorithm:
+```{r}
+# empty vectors and lists:
+data_list = index_list = list()
+pred = c()
+
+# start by drawing 'n.boot' bootstrap samples:
+set.seed(123)
+for (i in 1:n.boot){
+  # index of bootstrap sample:
+  index_list[[i]] = sample(nrow(data),  replace = TRUE)
+  
+  # ith bootstrap sample:
+  data_list[[i]] =data[index_list[[i]], ]
+}
+
+# list of trees for each bootstrap sample
+tree_list = lapply(data_list, function(data_i){
+    regtree(data = data_i, resp = resp, min.obs = min.obs, feat = c("Disease.category", "Albumin", "Cardiovascular"))
+})
+```
+
+One way to calculate variable importance is to shuffle the values of a variable and see how it affects the prediction accuracy. We start by generating a list of new datasets with shuffled values for each variable, one at a time. 
+
+```{r}
+data.temp = data[ , feat]
+newdata_list = lapply(1:length(feat), function(i){
+  data.temp[ , feat[i]] = sample(data[ , feat[i]], replace = FALSE)
+  data.temp[, resp] = data[, resp]
+  data.temp
+})
+```
+
+Compute the out-of-bag-error using the original dataset:
+```{r}
+error_original = ooberror(newdata = data, index_list = index_list, tree_list = tree_list, data = data)
+error_original
+```
+
+Repeat the same calculations but this time with the shuffled datasets:
+```{r}
+error_shuffle = sapply(1:length(feat), function(i){
+  ooberror(newdata = newdata_list[[i]], data = data, index_list = index_list, tree_list = tree_list)
+})
+data.frame(variable  = feat, error = error_shuffle)
+```
+
+The out-of-bad errors based on the shuffled datasets are generally equal to or higher than the out-of-bag error based on the original dataset. The difference was highest for 'Disease.category', implying that it is an important predictor. Compared to the other variables, randomizing its values had a bigger impact on the accuracy of predictions, as measured by the out-of-bag error. Randomizing values for 'Albumin' only made a small difference to the out-of-bag error. Shuffling the values of 'Cardiovascular', on the other hand, did not affect the out-of-bag error，so was likely not an important predictor.
+
+### Random forest 
+
+The process of determining variable importance is similar for bagging and random forest, as the two approaches share similar algorithms, apart using a random subset of predictors at each split in random forest. For this reason, the process of computing variable importance is not detailed here.
+
+### Boosting
+
+Boosting is another popular tree-based algorithm that involves building multiple trees iteratively to improve the performance of the model. To obtain a measure of variable importance, we can tally the reduction in node impurity brought by each variable across all iterations.
+
+Start with empty objects to store results and 'data_boost' which will store the predictions.
+```{r}
+pred = c()
+varimp = list()
+data_boost = rhcdata[, names(rhcdata)[names(rhcdata)!= "Y"]]
+```
+
+Set initial predictions. The initial predictions can be taken as the mean of the response. 
+```{r}
+pred = rep(mean(rhcdata[, "Y"]), nrow(rhcdata))
+head(pred)
+```
+
+Compute the residuals by substrating the predictions from the observed values
+```{r}
+data_boost$resid = rhcdata[, "Y"] - pred
+head(data_boost$resid)
+```
+
+Construct a tree with the residuals as the outcome
+```{r}
+tree = rpart(resid ~ ., data = data_boost, minsplit = 200, cp = -1)
+tree
+```
+
+Record the variable importance of this tree
+
+```{r}
+varimp[[1]] = varImp(tree)
+varImp(tree)
+```
+
+Generate predictions from the tree:
+
+```{r}
+pred_resid = predict(tree, newdata =  data_boost) 
+head(pred_resid)
+```
+
+Update the previous predictions for the response with the new residuals:
+
+```{r}
+rate=0.1
+pred = pred + pred_resid*rate 
+head(pred)
+```
+
+The above steps are repeated over a pre-specified number of iterations $N$ (e.g. 100) to complete the boosting algorithm. The predictions after the second iteration:
+
+The predictions after 100 iterations:
+```{r}
+for (i in 2:100){
+  data_boost$resid = rhcdata[, "Y"] - pred
+  tree = rpart(resid~., data = data_boost, minsplit = 200, cp = -1)
+  varimp[[i]] = varImp(tree)
+  pred_resid = predict(tree, newdata =  data_boost) 
+  pred = pred + pred_resid*rate 
+}
+head(pred)
+```
+
+Organize the variable importance object:
+```{r}
+varimp <- do.call(cbind, varimp)
+varimp <- apply(varimp, 1, FUN = function(.){sum(.)})
+```
+
+The most important variables are:
+```{r}
+head(varimp)
+```
+
+Scale the variable importance measures so that the sum is 100:
+
+```{r}
+head(sort(varimp/sum(varimp)*100, decreasing = TRUE))
+```
+
+Compare the above with the variable importance measures given by 'gbm':
+
+```{r}
+gbmboost <- gbm(Y ∼ ., data = rhcdata, distribution = "gaussian", n.trees = 2, n.minobsinnode = 500/3, bag.fraction = 1, shrinkage=0.1)
+head(summary(gbmboost))
+```

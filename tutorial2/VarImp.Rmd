@@ -20,7 +20,7 @@ In regression models, the relative importance of predictors can be determine in 
 The dataset is prepared following the steps outlined in "R Guide for TMLE in Medical Research" (https://ehsanx.github.io/TMLEworkshop/).
 
 ```{r}
-rhcdata <- read.csv("tutorial2/rhc.csv") # load data
+rhcdata <- read.csv("rhc.csv") # load data
 
 # add column for outcome Y: length of stay 
 # Y = date of discharge - study admission date
@@ -76,7 +76,6 @@ names(rhcdata) <- c("Disease.category", "Cancer", "Cardiovascular",
 
 levels(rhcdata$Insurance) = c("Medicaid", "Medicare", "M&M", "None", "Priv", "Priv&Medicare")
 
-rhcdata = rhcdata[1:500,]
 ```
 
 #### CARTs
@@ -101,7 +100,7 @@ feat = c("Albumin", "Cardiovascular", "Disease.category")
 
 ```{r}
 # set minimum observation per parent node. The value is large in order to guarantee a simple model with few splits.
-min.obs = 200
+min.obs = 2000
 
 # set minimum node size. The same value is used as the default setting in rpart
 leafsize = min.obs/3 
@@ -350,7 +349,7 @@ regtree <- function(data, resp, min.obs, feat){
   }
   return(list(output = output, varimp = varimp))
 }
-res = regtree(data = rhcdata, resp = "Y", min.obs = 200, feat = c("Disease.category", "Albumin", "Cardiovascular"))
+res = regtree(data = rhcdata, resp = "Y", min.obs = min.obs, feat = c("Disease.category", "Albumin", "Cardiovascular"))
 ```
 
 The tree was split eight times, with either 'Disease.category' or 'Albumin':
@@ -379,7 +378,7 @@ data.frame(variable = feat, varimp = varimp_sum)
 'Cardiovascular' was the least importance variable, as expected, as it wasn't involved in any of the splits. 'Disease.category' appeared more important than 'Albumin' although it was only involved in three of eight splits. The above results can be compared to the output of existing software package 'rpart':
 
 ```{r}
-res_rpart = rpart(Y~Disease.category+Albumin+Cardiovascular, data = rhcdata, minsplit = 200, cp=-1)
+res_rpart = rpart(Y~Disease.category+Albumin+Cardiovascular, data = rhcdata, minsplit = min.obs, cp=-1)
 res_rpart
 res_rpart$variable.importance
 ```
@@ -387,7 +386,7 @@ res_rpart$variable.importance
 
 #### Bagging
 
-Variable importance can be obtained for other tree-based methods, including bagging, random forest Bagging and random forest involve building a number of different trees, where it is possible to obtain estimates of prediction accuracy with internal validation. In addition to the approach shown above for assessing variable importance through tracking reductions in 'node impurity' or heterogeneity in the data, one can also obtain measures of variable importance via prediction accuracy. Permuting the values of an important predictor should compromise the prediction accuracy of the model. To demonstrate this, we will apply bootstrap aggregation (bagging) to the RHC dataset.
+Variable importance can be obtained for other tree-based methods, including bagging, random forest. Bagging and random forest involve building a number of different trees, where it is possible to obtain estimates of prediction accuracy with internal validation. In addition to the approach shown above for assessing variable importance through tracking reductions in 'node impurity' or heterogeneity in the data, one can also obtain measures of variable importance via prediction accuracy. Permuting the values of an important predictor should compromise the prediction accuracy of the model. To demonstrate this, we will apply bootstrap aggregation (bagging) to the RHC dataset.
 
 Let 'n.boot' be the number of bootstrap samples. 
 ```{r}
@@ -579,7 +578,7 @@ head(data_boost$resid)
 
 Construct a tree with the residuals as the outcome
 ```{r}
-tree = rpart(resid ~ ., data = data_boost, minsplit = 200, cp = -1)
+tree = rpart(resid ~ ., data = data_boost, minsplit = min.obs, cp = -1)
 tree
 ```
 
@@ -611,7 +610,7 @@ The predictions after 100 iterations:
 ```{r}
 for (i in 2:100){
   data_boost$resid = rhcdata[, "Y"] - pred
-  tree = rpart(resid~., data = data_boost, minsplit = 200, cp = -1)
+  tree = rpart(resid~., data = data_boost, minsplit = min.obs, cp = -1)
   varimp[[i]] = varImp(tree)
   pred_resid = predict(tree, newdata =  data_boost) 
   pred = pred + pred_resid*rate 
@@ -639,6 +638,6 @@ head(sort(varimp/sum(varimp)*100, decreasing = TRUE))
 Compare the above with the variable importance measures given by 'gbm':
 
 ```{r}
-gbmboost <- gbm(Y ∼ ., data = rhcdata, distribution = "gaussian", n.trees = 2, n.minobsinnode = 500/3, bag.fraction = 1, shrinkage=0.1)
+gbmboost <- gbm(Y ∼ ., data = rhcdata, distribution = "gaussian", n.trees = 2, n.minobsinnode = min.obs, bag.fraction = 1, shrinkage=0.1)
 head(summary(gbmboost))
 ```

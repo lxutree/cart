@@ -177,7 +177,7 @@ pre code {
 <div id="data-cleaning" class="section level5">
 <h5>Data cleaning</h5>
 <p>The dataset is prepared following the steps outlined in “R Guide for TMLE in Medical Research” (<a href="https://ehsanx.github.io/TMLEworkshop/" class="uri">https://ehsanx.github.io/TMLEworkshop/</a>).</p>
-<pre class="r"><code>rhcdata &lt;- read.csv(&quot;tutorial2/rhc.csv&quot;) # load data
+<pre class="r"><code>rhcdata &lt;- read.csv(&quot;rhc.csv&quot;) # load data
 
 # add column for outcome Y: length of stay 
 # Y = date of discharge - study admission date
@@ -231,9 +231,7 @@ names(rhcdata) &lt;- c(&quot;Disease.category&quot;, &quot;Cancer&quot;, &quot;C
                     &quot;Trauma.Diag&quot;, &quot;Orthopedic.Diag&quot;, &quot;race&quot;, &quot;income&quot;, 
                     &quot;Y&quot;, &quot;A&quot;)
 
-levels(rhcdata$Insurance) = c(&quot;Medicaid&quot;, &quot;Medicare&quot;, &quot;M&amp;M&quot;, &quot;None&quot;, &quot;Priv&quot;, &quot;Priv&amp;Medicare&quot;)
-
-rhcdata = rhcdata[1:500,]</code></pre>
+levels(rhcdata$Insurance) = c(&quot;Medicaid&quot;, &quot;Medicare&quot;, &quot;M&amp;M&quot;, &quot;None&quot;, &quot;Priv&quot;, &quot;Priv&amp;Medicare&quot;)</code></pre>
 </div>
 <div id="carts" class="section level4">
 <h4>CARTs</h4>
@@ -248,7 +246,7 @@ output = data.frame(status = &quot;split&quot;, count = nrow(data), &quot;split 
 <pre class="r"><code># create vector of variables to be used for building the tree
 feat = c(&quot;Albumin&quot;, &quot;Cardiovascular&quot;, &quot;Disease.category&quot;)</code></pre>
 <pre class="r"><code># set minimum observation per parent node. The value is large in order to guarantee a simple model with few splits.
-min.obs = 200
+min.obs = 2000
 
 # set minimum node size. The same value is used as the default setting in rpart
 leafsize = min.obs/3 
@@ -331,14 +329,14 @@ splitvar</code></pre>
 <p>Note that the sum of squared errors (SSE) for the parent node is:</p>
 <pre class="r"><code>rss_parent = sum((data[,resp] - mean(data[,resp]))^2)
 rss_parent</code></pre>
-<pre><code>## [1] 343069.3</code></pre>
+<pre><code>## [1] 3836690</code></pre>
 <p>The SSE after the split is:</p>
 <pre class="r"><code>min(error, na.rm = TRUE)</code></pre>
-<pre><code>## [1] 331946.3</code></pre>
+<pre><code>## [1] 3765678</code></pre>
 <p>The variable ‘Disease.category’ reduced the SSE of the parent node by:</p>
 <pre class="r"><code>diff = rss_parent - min(error, na.rm = TRUE)
 diff</code></pre>
-<pre><code>## [1] 11122.98</code></pre>
+<pre><code>## [1] 71011.63</code></pre>
 <p>Repeat the above steps but this time with a loop to complete the tree.</p>
 <pre class="r"><code>regtree &lt;- function(data, resp, min.obs, feat){
   stopsplit = FALSE
@@ -488,23 +486,26 @@ diff</code></pre>
   }
   return(list(output = output, varimp = varimp))
 }
-res = regtree(data = rhcdata, resp = &quot;Y&quot;, min.obs = 200, feat = c(&quot;Disease.category&quot;, &quot;Albumin&quot;, &quot;Cardiovascular&quot;))</code></pre>
+res = regtree(data = rhcdata, resp = &quot;Y&quot;, min.obs = min.obs, feat = c(&quot;Disease.category&quot;, &quot;Albumin&quot;, &quot;Cardiovascular&quot;))</code></pre>
 <p>The tree was split eight times, with either ‘Disease.category’ or ‘Albumin’:</p>
 <pre class="r"><code>res$output</code></pre>
 <pre><code>##   status count                    split.rule iter     mean
-## 1 parent   500                          root    0 23.05800
-## 2   leaf   150 Disease.category in Other,CHF    1 15.85333
-## 3 parent   350  Disease.category in ARF,MOSF    1 26.14571
-## 4   leaf   149      Disease.category in MOSF    2 29.43624
-## 5 parent   201       Disease.category in ARF    2 23.70647
-## 6   leaf    85          Albumin &lt;= 3.1496582    3 20.56471
-## 7   leaf   116           Albumin &gt; 3.1496582    3 26.00862</code></pre>
+## 1 parent  5735                          root    0 21.55937
+## 2   leaf  1619 Disease.category in Other,CHF    1 15.94873
+## 3 parent  4116  Disease.category in ARF,MOSF    1 23.76628
+## 4   leaf   734         Albumin &lt;= 2.24975585    2 29.30109
+## 5 parent  3382          Albumin &gt; 2.24975585    2 22.56505
+## 6   leaf  1248      Disease.category in MOSF    3 24.05929
+## 7 parent  2134       Disease.category in ARF    3 21.69119
+## 8   leaf   834         Albumin &lt;= 3.44995115    4 22.67026
+## 9   leaf  1300          Albumin &gt; 3.44995115    4 21.06308</code></pre>
 <p>The reductions in SSE over each split are as follows:</p>
 <pre class="r"><code>res$varimp</code></pre>
 <pre><code>##           variable  diff_sse
-## 1 Disease.category 11122.976
-## 2 Disease.category  2809.243
-## 3          Albumin  1453.796</code></pre>
+## 1 Disease.category 71011.629
+## 2          Albumin 27365.511
+## 3 Disease.category  4416.082
+## 4          Albumin  1312.344</code></pre>
 <p>For each variable, sum up the reductions in SSE over all splits it was involved in.</p>
 <pre class="r"><code>varimp_sum = c()
 for (i in 1:length(feat)){
@@ -512,32 +513,34 @@ for (i in 1:length(feat)){
 }</code></pre>
 <p>The relative variable importance is as follows:</p>
 <pre class="r"><code>data.frame(variable = feat, varimp = varimp_sum)</code></pre>
-<pre><code>##           variable    varimp
-## 1          Albumin  1453.796
-## 2   Cardiovascular     0.000
-## 3 Disease.category 13932.219</code></pre>
+<pre><code>##           variable   varimp
+## 1          Albumin 28677.86
+## 2   Cardiovascular     0.00
+## 3 Disease.category 75427.71</code></pre>
 <p>‘Cardiovascular’ was the least importance variable, as expected, as it wasn’t involved in any of the splits. ‘Disease.category’ appeared more important than ‘Albumin’ although it was only involved in three of eight splits. The above results can be compared to the output of existing software package ‘rpart’:</p>
-<pre class="r"><code>res_rpart = rpart(Y~Disease.category+Albumin+Cardiovascular, data = rhcdata, minsplit = 200, cp=-1)
+<pre class="r"><code>res_rpart = rpart(Y~Disease.category+Albumin+Cardiovascular, data = rhcdata, minsplit = min.obs, cp=-1)
 res_rpart</code></pre>
-<pre><code>## n= 500 
+<pre><code>## n= 5735 
 ## 
 ## node), split, n, deviance, yval
 ##       * denotes terminal node
 ## 
-##  1) root 500 343069.30 23.05800  
-##    2) Disease.category=CHF,Other 150  46566.77 15.85333 *
-##    3) Disease.category=ARF,MOSF 350 285379.60 26.14571  
-##      6) Disease.category=ARF 201 126177.70 23.70647  
-##       12) Albumin&lt; 3.149658 85  35150.89 20.56471 *
-##       13) Albumin&gt;=3.149658 116  89572.99 26.00862 *
-##      7) Disease.category=MOSF 149 156392.60 29.43624 *</code></pre>
+##  1) root 5735 3836690.0 21.55937  
+##    2) Disease.category=CHF,Other 1619  615924.7 15.94873 *
+##    3) Disease.category=ARF,MOSF 4116 3149753.0 23.76628  
+##      6) Albumin&gt;=2.249756 3382 2243847.0 22.56505  
+##       12) Disease.category=ARF 2134 1219127.0 21.69119  
+##         24) Albumin&gt;=3.449951 1300  690502.8 21.06308 *
+##         25) Albumin&lt; 3.449951 834  527312.3 22.67026 *
+##       13) Disease.category=MOSF 1248 1020304.0 24.05929 *
+##      7) Albumin&lt; 2.249756 734  878540.5 29.30109 *</code></pre>
 <pre class="r"><code>res_rpart$variable.importance</code></pre>
 <pre><code>## Disease.category          Albumin 
-##        13932.219         1938.949</code></pre>
+##         75427.71         30563.90</code></pre>
 </div>
 <div id="bagging" class="section level4">
 <h4>Bagging</h4>
-<p>Variable importance can be obtained for other tree-based methods, including bagging, random forest Bagging and random forest involve building a number of different trees, where it is possible to obtain estimates of prediction accuracy with internal validation. In addition to the approach shown above for assessing variable importance through tracking reductions in ‘node impurity’ or heterogeneity in the data, one can also obtain measures of variable importance via prediction accuracy. Permuting the values of an important predictor should compromise the prediction accuracy of the model. To demonstrate this, we will apply bootstrap aggregation (bagging) to the RHC dataset.</p>
+<p>Variable importance can be obtained for other tree-based methods, including bagging, random forest. Bagging and random forest involve building a number of different trees, where it is possible to obtain estimates of prediction accuracy with internal validation. In addition to the approach shown above for assessing variable importance through tracking reductions in ‘node impurity’ or heterogeneity in the data, one can also obtain measures of variable importance via prediction accuracy. Permuting the values of an important predictor should compromise the prediction accuracy of the model. To demonstrate this, we will apply bootstrap aggregation (bagging) to the RHC dataset.</p>
 <p>Let ‘n.boot’ be the number of bootstrap samples.</p>
 <pre class="r"><code>n.boot = 100</code></pre>
 <p>The following are functions to generate predictions from the custom outputs.</p>
@@ -670,16 +673,16 @@ newdata_list = lapply(1:length(feat), function(i){
 <p>Compute the out-of-bag-error using the original dataset:</p>
 <pre class="r"><code>error_original = ooberror(newdata = data, index_list = index_list, tree_list = tree_list, data = data)
 error_original</code></pre>
-<pre><code>## [1] 25.60013</code></pre>
+<pre><code>## [1] 25.51162</code></pre>
 <p>Repeat the same calculations but this time with the shuffled datasets:</p>
 <pre class="r"><code>error_shuffle = sapply(1:length(feat), function(i){
   ooberror(newdata = newdata_list[[i]], data = data, index_list = index_list, tree_list = tree_list)
 })
 data.frame(variable  = feat, error = error_shuffle)</code></pre>
 <pre><code>##           variable    error
-## 1          Albumin 25.68160
-## 2   Cardiovascular 25.60013
-## 3 Disease.category 26.50496</code></pre>
+## 1          Albumin 25.64812
+## 2   Cardiovascular 25.51162
+## 3 Disease.category 25.99525</code></pre>
 <p>The out-of-bad errors based on the shuffled datasets are generally equal to or higher than the out-of-bag error based on the original dataset. The difference was highest for ‘Disease.category’, implying that it is an important predictor. Compared to the other variables, randomizing its values had a bigger impact on the accuracy of predictions, as measured by the out-of-bag error. Randomizing values for ‘Albumin’ only made a small difference to the out-of-bag error. Shuffling the values of ‘Cardiovascular’, on the other hand, did not affect the out-of-bag error，so was likely not an important predictor.</p>
 </div>
 </div>
@@ -697,131 +700,129 @@ data_boost = rhcdata[, names(rhcdata)[names(rhcdata)!= &quot;Y&quot;]]</code></p
 <p>Set initial predictions. The initial predictions can be taken as the mean of the response.</p>
 <pre class="r"><code>pred = rep(mean(rhcdata[, &quot;Y&quot;]), nrow(rhcdata))
 head(pred)</code></pre>
-<pre><code>## [1] 23.058 23.058 23.058 23.058 23.058 23.058</code></pre>
+<pre><code>## [1] 21.55937 21.55937 21.55937 21.55937 21.55937 21.55937</code></pre>
 <p>Compute the residuals by substrating the predictions from the observed values</p>
 <pre class="r"><code>data_boost$resid = rhcdata[, &quot;Y&quot;] - pred
 head(data_boost$resid)</code></pre>
-<pre><code>## [1] -14.058  21.942  36.942  13.942 -21.058 -16.058</code></pre>
+<pre><code>## [1] -12.55937  23.44063  38.44063  15.44063 -19.55937 -14.55937</code></pre>
 <p>Construct a tree with the residuals as the outcome</p>
-<pre class="r"><code>tree = rpart(resid ~ ., data = data_boost, minsplit = 200, cp = -1)
+<pre class="r"><code>tree = rpart(resid ~ ., data = data_boost, minsplit = min.obs, cp = -1)
 tree</code></pre>
-<pre><code>## n= 500 
+<pre><code>## n= 5735 
 ## 
 ## node), split, n, deviance, yval
 ##       * denotes terminal node
 ## 
-##  1) root 500 343069.30  5.414336e-15  
-##    2) Disease.category=CHF,Other 150  46566.77 -7.204667e+00 *
-##    3) Disease.category=ARF,MOSF 350 285379.60  3.087714e+00  
-##      6) age=[50,60),[80, Inf) 97  26849.32 -3.655938e+00 *
-##      7) age=[-Inf,50),[60,70),[70,80) 253 252427.70  5.673225e+00  
-##       14) Heart.rate&lt; 115.5 80  31325.99 -1.945500e+00 *
-##       15) Heart.rate&gt;=115.5 173 214310.80  9.196335e+00 *</code></pre>
+##  1) root 5735 3836690.0 -1.086381e-14  
+##    2) Disease.category=CHF,Other 1619  615924.7 -5.610638e+00 *
+##    3) Disease.category=ARF,MOSF 4116 3149753.0  2.206906e+00  
+##      6) Albumin&gt;=2.249756 3382 2243847.0  1.005678e+00  
+##       12) A&lt; 0.5 2007 1189082.0 -8.339114e-01  
+##         24) Bilirubin&lt; 1.004883 715  306031.9 -3.395736e+00 *
+##         25) Bilirubin&gt;=1.004883 1292  875760.5  5.838166e-01 *
+##       13) A&gt;=0.5 1375 1038060.0  3.690810e+00 *
+##      7) Albumin&lt; 2.249756 734  878540.5  7.741718e+00 *</code></pre>
 <p>Record the variable importance of this tree</p>
 <pre class="r"><code>varimp[[1]] = varImp(tree)
 varImp(tree)</code></pre>
-<pre><code>##                          Overall
-## age                   0.02138389
-## APACHE.score          0.01756100
-## blood.pressure        0.02744489
-## Disease.category      0.03242195
-## Gastrointestinal.Diag 0.02662066
-## Heart.rate            0.04154549
-## Hematocrit            0.02205501
-## income                0.01678029
-## PaO2vs.FIO2           0.07010145
-## PH                    0.01338312
-## Temperature           0.02295496
-## Cancer                0.00000000
-## Cardiovascular        0.00000000
-## Congestive.HF         0.00000000
-## Dementia              0.00000000
-## Psychiatric           0.00000000
-## Pulmonary             0.00000000
-## Renal                 0.00000000
-## Hepatic               0.00000000
-## GI.Bleed              0.00000000
-## Tumor                 0.00000000
-## Immunosupperssion     0.00000000
-## Transfer.hx           0.00000000
-## MI                    0.00000000
-## sex                   0.00000000
-## edu                   0.00000000
-## DASIndex              0.00000000
-## Glasgow.Coma.Score    0.00000000
-## WBC                   0.00000000
-## Respiratory.rate      0.00000000
-## Albumin               0.00000000
-## Bilirubin             0.00000000
-## Creatinine            0.00000000
-## Sodium                0.00000000
-## Potassium             0.00000000
-## PaCo2                 0.00000000
-## Weight                0.00000000
-## DNR.status            0.00000000
-## Insurance             0.00000000
-## Respiratory.Diag      0.00000000
-## Cardiovascular.Diag   0.00000000
-## Neurological.Diag     0.00000000
-## Renal.Diag            0.00000000
-## Metabolic.Diag        0.00000000
-## Hematologic.Diag      0.00000000
-## Sepsis.Diag           0.00000000
-## Trauma.Diag           0.00000000
-## Orthopedic.Diag       0.00000000
-## race                  0.00000000
-## A                     0.00000000</code></pre>
+<pre><code>##                           Overall
+## A                     0.025114556
+## age                   0.007397170
+## Albumin               0.019478800
+## Bilirubin             0.006130247
+## Cancer                0.012279063
+## Creatinine            0.003064903
+## Disease.category      0.018508568
+## Glasgow.Coma.Score    0.005005779
+## Hematocrit            0.031784449
+## Temperature           0.009570759
+## Tumor                 0.011619179
+## Cardiovascular        0.000000000
+## Congestive.HF         0.000000000
+## Dementia              0.000000000
+## Psychiatric           0.000000000
+## Pulmonary             0.000000000
+## Renal                 0.000000000
+## Hepatic               0.000000000
+## GI.Bleed              0.000000000
+## Immunosupperssion     0.000000000
+## Transfer.hx           0.000000000
+## MI                    0.000000000
+## sex                   0.000000000
+## edu                   0.000000000
+## DASIndex              0.000000000
+## APACHE.score          0.000000000
+## blood.pressure        0.000000000
+## WBC                   0.000000000
+## Heart.rate            0.000000000
+## Respiratory.rate      0.000000000
+## PaO2vs.FIO2           0.000000000
+## Sodium                0.000000000
+## Potassium             0.000000000
+## PaCo2                 0.000000000
+## PH                    0.000000000
+## Weight                0.000000000
+## DNR.status            0.000000000
+## Insurance             0.000000000
+## Respiratory.Diag      0.000000000
+## Cardiovascular.Diag   0.000000000
+## Neurological.Diag     0.000000000
+## Gastrointestinal.Diag 0.000000000
+## Renal.Diag            0.000000000
+## Metabolic.Diag        0.000000000
+## Hematologic.Diag      0.000000000
+## Sepsis.Diag           0.000000000
+## Trauma.Diag           0.000000000
+## Orthopedic.Diag       0.000000000
+## race                  0.000000000
+## income                0.000000000</code></pre>
 <p>Generate predictions from the tree:</p>
 <pre class="r"><code>pred_resid = predict(tree, newdata =  data_boost) 
 head(pred_resid)</code></pre>
 <pre><code>##         1         2         3         4         5         6 
-## -7.204667  9.196335  9.196335 -1.945500  9.196335 -7.204667</code></pre>
+## -5.610638  3.690810  3.690810 -3.395736  3.690810 -5.610638</code></pre>
 <p>Update the previous predictions for the response with the new residuals:</p>
 <pre class="r"><code>rate=0.1
 pred = pred + pred_resid*rate 
 head(pred)</code></pre>
 <pre><code>##        1        2        3        4        5        6 
-## 22.33753 23.97763 23.97763 22.86345 23.97763 22.33753</code></pre>
+## 20.99831 21.92845 21.92845 21.21980 21.92845 20.99831</code></pre>
 <p>The above steps are repeated over a pre-specified number of iterations <span class="math inline">\(N\)</span> (e.g. 100) to complete the boosting algorithm. The predictions after the second iteration:</p>
 <p>The predictions after 100 iterations:</p>
 <pre class="r"><code>for (i in 2:100){
   data_boost$resid = rhcdata[, &quot;Y&quot;] - pred
-  tree = rpart(resid~., data = data_boost, minsplit = 200, cp = -1)
+  tree = rpart(resid~., data = data_boost, minsplit = min.obs, cp = -1)
   varimp[[i]] = varImp(tree)
   pred_resid = predict(tree, newdata =  data_boost) 
   pred = pred + pred_resid*rate 
 }
 head(pred)</code></pre>
 <pre><code>##        1        2        3        4        5        6 
-## 11.57218 34.40683 21.85649 31.24284 21.56973 17.25662</code></pre>
+## 19.31555 27.60526 14.14183 17.55497 22.84337 18.22209</code></pre>
 <p>Organize the variable importance object:</p>
 <pre class="r"><code>varimp &lt;- do.call(cbind, varimp)
 varimp &lt;- apply(varimp, 1, FUN = function(.){sum(.)})</code></pre>
 <p>The most important variables are:</p>
 <pre class="r"><code>head(varimp)</code></pre>
-<pre><code>##                   age          APACHE.score        blood.pressure 
-##              1.440311              1.268586              1.573365 
-##      Disease.category Gastrointestinal.Diag            Heart.rate 
-##              1.342168              1.295878              1.214527</code></pre>
+<pre><code>##          A        age    Albumin  Bilirubin     Cancer Creatinine 
+##  0.3441942  0.2846597  0.3548980  0.2637139  0.3203932  0.3376198</code></pre>
 <p>Scale the variable importance measures so that the sum is 100:</p>
 <pre class="r"><code>head(sort(varimp/sum(varimp)*100, decreasing = TRUE))</code></pre>
-<pre><code>## blood.pressure         income     Hematocrit    PaO2vs.FIO2            age 
-##       9.064157       8.638467       8.614958       8.583660       8.297634 
-##             PH 
-##       7.843728</code></pre>
+<pre><code>##            Albumin                  A         Creatinine             Cancer 
+##           9.138976           8.863343           8.694044           8.250443 
+##         Hematocrit Glasgow.Coma.Score 
+##           7.904538           7.605297</code></pre>
 <p>Compare the above with the variable importance measures given by ‘gbm’:</p>
-<pre class="r"><code>gbmboost &lt;- gbm(Y ∼ ., data = rhcdata, distribution = &quot;gaussian&quot;, n.trees = 2, n.minobsinnode = 500/3, bag.fraction = 1, shrinkage=0.1)</code></pre>
-<pre><code>## Warning in gbm.fit(x = x, y = y, offset = offset, distribution = distribution, :
-## variable 47: Orthopedic.Diag has no variation.</code></pre>
-<pre class="r"><code>head(summary(gbmboost))</code></pre>
-<p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABUAAAAPACAMAAADDuCPrAAAA5FBMVEUAAAAAADoAAGYAAP8AOjoAOmYAOpAAZrY6AAA6OgA6Ojo6OmY6ZmY6ZpA6ZrY6kLY6kNtmAABmADpmOgBmOjpmOmZmZjpmZmZmZpBmkJBmkLZmkNtmtrZmtttmtv+QOgCQZgCQZjqQZmaQkDqQkGaQkJCQkLaQkNuQtraQttuQ2/+2ZgC2Zjq2kDq2kGa2kJC2kLa2tma2tpC2tra2ttu225C229u22/+2///bkDrbkGbbtmbbtpDbtrbbttvb25Db27bb29vb2//b/7bb////tmb/25D/27b/29v//7b//9v///+ozq0lAAAACXBIWXMAAB2HAAAdhwGP5fFlAAAgAElEQVR4nO3d/2MTR5rg4TaHwcDBwMEOGWYhS252L4xZ5i7kSHyQXcziYOT///85tb7LEiF5pWreKp7nl9iOaasC+VDdXV3qLgAI6b70CwColYACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIECShAkIACBAkoQJCAAgQJKECQgAIE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" width="672" /></p>
-<pre><code>##                               var rel.inf
-## PaO2vs.FIO2           PaO2vs.FIO2     100
-## Disease.category Disease.category       0
-## Cancer                     Cancer       0
-## Cardiovascular     Cardiovascular       0
-## Congestive.HF       Congestive.HF       0
-## Dementia                 Dementia       0</code></pre>
+<pre class="r"><code>gbmboost &lt;- gbm(Y ∼ ., data = rhcdata, distribution = &quot;gaussian&quot;, n.trees = 2, n.minobsinnode = 500/3, bag.fraction = 1, shrinkage=0.1)
+head(summary(gbmboost))</code></pre>
+<p><img src="data:image/png;base64,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" width="672" /></p>
+<pre><code>##                               var  rel.inf
+## Disease.category Disease.category 51.74467
+## DNR.status             DNR.status 48.25533
+## Cancer                     Cancer  0.00000
+## Cardiovascular     Cardiovascular  0.00000
+## Congestive.HF       Congestive.HF  0.00000
+## Dementia                 Dementia  0.00000</code></pre>
 </div>
 
 

@@ -82,7 +82,7 @@ feat = names(data)[names(data)!=resp]
 ```
 
 
-$\color{red}{\text{Step 2 a):}}$, 
+$\color{red}{\text{Step 2 a):}}$
 
 During the first iteration, only the root will be split:
 ```{r}
@@ -90,7 +90,7 @@ split.queue = which(output$status == "split")
 split.queue
 ```
 
-$\color{red}{\text{Step 2 b):}}$, 
+$\color{red}{\text{Step 2 b):}}$
 
 Now we compute the gini index for each of the three variables, 'gender', 'change' and 'med':
 
@@ -108,7 +108,7 @@ for (i in 1:length(feat)){
   data.gini = data.frame(var = data.temp[, feat[i]], data.temp[, resp])
   
   # if feature i is a factor:
-  if( is.factor(data.gini$var) ) {
+  if( is.factor(data.gini$var) | is.character(data.gini$var) ) {
     # split by levels:
     data.gini.list = split(data.gini, data.gini$var)
     # gini index for feature i:
@@ -163,7 +163,7 @@ split.var = feat[which.min(gini)]
 split.var
 ```
 
-$\color{red}{\text{Step 3:}}$, 
+$\color{red}{\text{Step 3:}}$
 
 Split the current node by the two levels in 'change':
 ```{r}
@@ -180,7 +180,7 @@ if( is.factor(data.temp[[split.var]]) ) {
 data.next
 ```
 
-$\color{red}{\text{Step 4:}}$, 
+$\color{red}{\text{Step 4:}}$ 
 
 Determine if the children nodes need to be split further in the next iteration:
 ```{r}
@@ -226,7 +226,7 @@ So far, the results are as follows:
 output
 ```
 
-$\color{red}{\text{Step 5:}}$, 
+$\color{red}{\text{Step 5:}}$ 
 We now repeat steps 2-4 using a while loop:
 
 ```{r}
